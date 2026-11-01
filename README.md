@@ -26,7 +26,7 @@ How it behaves:
 
 ## Run it locally
 
-Needs Node 22.18+.
+Needs Node 22 (22.18 or newer).
 
 ```bash
 npm install
