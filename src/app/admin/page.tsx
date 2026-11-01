@@ -70,7 +70,9 @@ function Lines({ lines }: { lines: string[] }) {
       </summary>
       <ol style={{ margin: "8px 0 0", padding: "12px 12px 12px 34px", background: "var(--paper)", border: "2px solid var(--ink)", maxHeight: 320, overflow: "auto", fontSize: 15, lineHeight: 1.5 }}>
         {lines.map((l, i) => (
-          <li key={i}>{l}</li>
+          <li key={i} style={{ whiteSpace: "pre-line" }}>
+            {l}
+          </li>
         ))}
       </ol>
     </details>
@@ -158,7 +160,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 </div>
                 <label className="field">
                   The line (fix typos before approving)
-                  <textarea name="body" rows={2} defaultValue={l.body} maxLength={200} className="textarea" style={{ fontSize: 18, fontWeight: 700 }} />
+                  <textarea name="body" rows={3} defaultValue={l.body} maxLength={500} className="textarea" style={{ fontSize: 18, fontWeight: 700 }} />
                 </label>
                 <div className="grid-2">
                   <button type="submit" name="decision" value="approve" className="btn btn-accent">

@@ -8,12 +8,16 @@ import {
   highlightParts,
   isBot,
   normalizeSlug,
+  bodyBlocks,
+  cleanEntry,
+  maxLength,
   parseLine,
   parseLineEdit,
   parsePackEdit,
   parsePitch,
   parseReview,
   plainText,
+  splitEntries,
   splitLines,
 } from "../src/lib/validation.ts";
 
@@ -106,7 +110,7 @@ describe("validation", () => {
     expect(parsePitch(form({ ...base, slug: "admin", lines: many(100) }))).toMatchObject({ ok: false, errors: { slug: expect.any(String) } });
     expect(parsePitch(form({ ...base, slug: "a", lines: many(100) }))).toMatchObject({ ok: false, errors: { slug: expect.any(String) } });
     const long = `${many(100)}\n${"x".repeat(201)}`;
-    expect(parsePitch(form({ ...base, lines: long }))).toMatchObject({ ok: false, errors: { lines: "Line 101 is over 200 characters." } });
+    expect(parsePitch(form({ ...base, lines: long }))).toMatchObject({ ok: false, errors: { lines: "Entry 101 is over 200 characters." } });
   });
 
   it("spots bots by the hidden field", () => {
@@ -161,5 +165,40 @@ describe("admin edit validation", () => {
     expect(parseLineEdit(form({ body: "  fixed   line " }))).toEqual({ ok: true, value: { body: "fixed line" } });
     expect(parseLineEdit(form({ body: "" }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
     expect(parseLineEdit(form({ body: "x".repeat(201) }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
+  });
+});
+
+describe("multi-line entries", () => {
+  const pasted = "Rules for tonight:\n• no phones\n-   I pick the movie\n\n\n  Why were you up at 3am?  \n \nrules for tonight:\n- no phones\n- i pick the movie";
+
+  it("split on blank lines, keep line breaks, tidy bullets, drop duplicates", () => {
+    expect(splitEntries(pasted, "blocks")).toEqual(["Rules for tonight:\n- no phones\n- I pick the movie", "Why were you up at 3am?"]);
+    // The same text as one-per-line gives one entry per distinct non-empty line.
+    expect(splitEntries(pasted, "lines")).toHaveLength(5);
+  });
+
+  it("clean an entry without losing its lines", () => {
+    expect(cleanEntry("  a   b \n\n * c ")).toBe("a b\n- c");
+    expect(cleanEntry("*highlight* stays")).toBe("*highlight* stays");
+  });
+
+  it("allow longer multi-line entries", () => {
+    expect(maxLength("one line")).toBe(200);
+    expect(maxLength("two\nlines")).toBe(500);
+  });
+
+  it("group bullets into lists for display", () => {
+    expect(bodyBlocks("Rules:\n- one\n- two\nThat's it")).toEqual([
+      { kind: "text", text: "Rules:" },
+      { kind: "list", items: ["one", "two"] },
+      { kind: "text", text: "That's it" },
+    ]);
+  });
+
+  it("are accepted in pitches and submitted lines", () => {
+    const blocks = Array.from({ length: 30 }, (_, i) => `Entry ${i}\n- point a\n- point b`).join("\n\n");
+    const base = { slug: "lists", description: "A list a day", noun: "list", meterLabel: "Chaos" };
+    expect(parsePitch(form({ ...base, lines: blocks, format: "blocks" }))).toMatchObject({ ok: true, value: { lines: expect.arrayContaining(["Entry 0\n- point a\n- point b"]) } });
+    expect(parseLine(form({ body: "Rules for tonight:\n- no phones" }))).toEqual({ ok: true, value: { body: "Rules for tonight:\n- no phones", credit: null } });
   });
 });

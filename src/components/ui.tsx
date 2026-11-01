@@ -2,7 +2,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { toneStyle } from "@/lib/palette";
-import { highlightParts } from "@/lib/validation";
+import { bodyBlocks, highlightParts } from "@/lib/validation";
 
 export const GITHUB_URL = "https://github.com/astronights";
 
@@ -93,13 +93,53 @@ export function Footer() {
   );
 }
 
-/** Renders a line with its *highlighted* words. */
+/** Renders text with its *highlighted* words. */
 export function Highlighted({ body }: { body: string }) {
   return (
     <>
       {highlightParts(body).map((p, i) => (p.mark ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}
     </>
   );
+}
+
+/**
+ * Renders an entry: its line breaks, "- " bullets and *highlights*.
+ * One-line entries get quote marks; multi-line ones read better without.
+ */
+export function EntryBody({ body, quoted = true }: { body: string; quoted?: boolean }) {
+  if (!body.includes("\n")) {
+    return quoted ? (
+      <>
+        “<Highlighted body={body} />”
+      </>
+    ) : (
+      <Highlighted body={body} />
+    );
+  }
+  return (
+    <span className="entry">
+      {bodyBlocks(body).map((b, i) =>
+        b.kind === "list" ? (
+          <ul key={i} className="entry-list">
+            {b.items.map((item, j) => (
+              <li key={j}>
+                <Highlighted body={item} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span key={i} className="entry-line">
+            <Highlighted body={b.text} />
+          </span>
+        ),
+      )}
+    </span>
+  );
+}
+
+/** Extra class for today's card when the entry is long or multi-line, so it shrinks to fit. */
+export function quoteSize(body: string): string {
+  return body.includes("\n") || body.length > 140 ? "quote quote-long" : "quote";
 }
 
 /** Where the meter starts for a line nobody has rated yet. */

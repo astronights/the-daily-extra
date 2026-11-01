@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Header, Highlighted, Page, Footer } from "@/components/ui";
+import { EntryBody, Header, Page, Footer } from "@/components/ui";
 import { formatDay, formatIssue, issueNumber, timeAgo, utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import * as repo from "@/lib/repo";
@@ -59,11 +59,9 @@ export default async function ReportsPage({ params, searchParams }: Props) {
           {formatIssue(issueNumber(pack.launchedOn, day))} · {formatDay(day)}
         </p>
         {daily ? (
-          <p className="card" style={{ margin: 0, padding: "14px 16px", boxShadow: "none", fontSize: 18, lineHeight: 1.3, fontWeight: 800 }}>
-            <span>
-              “<Highlighted body={daily.body} />”
-            </span>
-          </p>
+          <div className="card" style={{ margin: 0, padding: "14px 16px", boxShadow: "none", fontSize: 18, lineHeight: 1.3, fontWeight: 800 }}>
+            <EntryBody body={daily.body} />
+          </div>
         ) : null}
       </div>
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { followAction, voteAction } from "@/app/actions";
-import { Footer, Highlighted, Page, SearchIcon, UpIcon } from "@/components/ui";
+import { EntryBody, Footer, Page, SearchIcon, UpIcon } from "@/components/ui";
 import { formatDay, formatIssue, issueNumber, utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import * as repo from "@/lib/repo";
@@ -56,7 +56,7 @@ export default async function Home() {
                     {formatIssue(issueNumber(p.launchedOn, day))}
                   </span>
                 </span>
-                <span className="snippet">{d ? <>“<Highlighted body={d.body} />”</> : "Nothing today. Got a line?"}</span>
+                <span className="snippet snippet-clamp">{d ? <EntryBody body={d.body} /> : "Nothing today. Got a line?"}</span>
               </Link>
             );
           })

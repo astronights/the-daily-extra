@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { formatCountdown, msUntilNextDay } from "@/lib/dates";
 import { IDLE, type FormState } from "@/lib/form-state";
-import { LIMITS, splitLines } from "@/lib/validation";
+import { LIMITS, splitEntries, type EntryFormat } from "@/lib/validation";
 
 type Action = (prev: FormState, form: FormData) => Promise<FormState>;
 
@@ -201,7 +201,7 @@ export function LineForm({ action, slug }: { action: Action; slug: string }) {
       <Honeypot />
       <label className="field">
         Your line
-        <textarea name="body" rows={3} required minLength={LIMITS.lineMin} maxLength={LIMITS.lineMax} className="textarea" aria-invalid={Boolean(e.body)} aria-describedby={e.body ? "err-line" : undefined} />
+        <textarea name="body" rows={3} required minLength={LIMITS.lineMin} maxLength={LIMITS.multiLineMax} className="textarea" aria-invalid={Boolean(e.body)} aria-describedby={e.body ? "err-line" : undefined} />
       </label>
       <FieldError id="err-line" message={e.body} />
       <label className="field">
@@ -215,37 +215,81 @@ export function LineForm({ action, slug }: { action: Action; slug: string }) {
   );
 }
 
-/** Big scrollable box for 30+ lines, with .txt upload and a live count. */
+/**
+ * Big scrollable box for 30+ entries, with .txt upload and a live count.
+ * Entries are one per line, or separated by blank lines so each can
+ * span several lines (lists, bullets).
+ */
 export function LinesField({ error }: { error?: string }) {
   const [value, setValue] = useState("");
-  const count = splitLines(value).length;
+  const [format, setFormat] = useState<EntryFormat>("lines");
+  const entries = splitEntries(value, format);
+  const count = entries.length;
   const min = LIMITS.pitchLinesMin;
   const pct = Math.min(100, Math.round((count / min) * 100));
+  // Pasted text with blank-line gaps and multi-line entries probably wants the other format.
+  const looksLikeBlocks = format === "lines" && splitEntries(value, "blocks").some((e) => e.includes("\n"));
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    setValue((v) => (v.trim() ? `${v.trimEnd()}\n${text}` : text));
+    const gap = format === "blocks" ? "\n\n" : "\n";
+    setValue((v) => (v.trim() ? `${v.trimEnd()}${gap}${text}` : text));
     e.target.value = "";
   }
 
   return (
     <>
+      <fieldset className="row" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="mono" style={{ marginBottom: 8 }}>
+          How are your entries split?
+        </legend>
+        {(
+          [
+            ["lines", "One per line"],
+            ["blocks", "Blank line between"],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key} className="chip" aria-pressed={format === key} style={{ position: "relative" }}>
+            <input
+              type="radio"
+              name="format"
+              value={key}
+              checked={format === key}
+              onChange={() => setFormat(key)}
+              style={{ position: "absolute", opacity: 0, width: 1, height: 1 }}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
       <label className="field">
-        Lines (one per line)
+        {format === "lines" ? "Entries (one per line)" : "Entries (blank line between each)"}
         <textarea
           name="lines"
           className="textarea textarea-lines"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          wrap="off"
+          wrap={format === "lines" ? "off" : "soft"}
           spellCheck
           aria-invalid={Boolean(error)}
           aria-describedby="lines-count"
-          placeholder={"Paste your lines here, one per line.\nOr upload a .txt file below."}
+          placeholder={
+            format === "lines"
+              ? "Paste your entries here, one per line.\nOr upload a .txt file below."
+              : "Rules for tonight:\n- no phones\n- I pick the movie\n\nWhy were you up at 3am?"
+          }
         />
       </label>
+      {looksLikeBlocks ? (
+        <p className="hint" role="status" style={{ fontWeight: 600 }}>
+          Looks like your entries are separated by blank lines.{" "}
+          <button type="button" className="chip" style={{ minHeight: 32, padding: "0 10px" }} onClick={() => setFormat("blocks")}>
+            Switch
+          </button>
+        </p>
+      ) : null}
       <div className="meta-row">
         <label className="chip upload">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
@@ -262,10 +306,9 @@ export function LinesField({ error }: { error?: string }) {
         <div style={{ width: `${pct}%` }} />
       </div>
       <p className="hint" style={{ fontWeight: 600 }}>
-        {count >= min ? "That's enough to pitch." : `${min - count} more to go.`} Blank lines and duplicates don&apos;t count.
+        {count >= min ? "That's enough to pitch." : `${min - count} more to go.`} Blank entries and duplicates don&apos;t count.
       </p>
       <FieldError id="err-lines" message={error} />
-      <input type="hidden" name="lineCount" value={count} />
     </>
   );
 }
@@ -329,8 +372,9 @@ export function PackForm({
       <fieldset className="fieldset">
         <legend>2 · The lines</legend>
         <p className="hint" style={{ fontSize: 14 }}>
-          At least {LIMITS.pitchLinesMin}, one per line. That&apos;s a month of dailies. Paste them in or upload a .txt file.
-          Wrap words in *asterisks* to highlight them.
+          At least {LIMITS.pitchLinesMin} entries. That&apos;s a month of dailies. Paste them in or upload a .txt file.
+          Need lists or line breaks? Pick &ldquo;Blank line between&rdquo; and start bullets with &ldquo;- &rdquo;. Wrap words in *asterisks* to
+          highlight them.
         </p>
         <LinesField error={e.lines} />
       </fieldset>
@@ -385,7 +429,7 @@ export function EditLineForm({ action, line }: { action: Action; line: { id: num
           <span>Line {line.id}</span>
           <span className="muted">{line.note}</span>
         </span>
-        <textarea name="body" rows={2} defaultValue={line.body} maxLength={LIMITS.lineMax} required className="textarea" aria-invalid={Boolean(e.body)} />
+        <textarea name="body" rows={line.body.includes("\n") ? 4 : 2} defaultValue={line.body} maxLength={LIMITS.multiLineMax} required className="textarea" aria-invalid={Boolean(e.body)} />
       </label>
       <FieldError id={`err-line-${line.id}`} message={e.body ?? (state.status === "error" ? state.message : undefined)} />
       <div className="row" style={{ justifyContent: "flex-end" }}>

@@ -135,10 +135,19 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .tabs a[aria-current="page"] { background: var(--ink); color: var(--ground); }
 .swatch { display: flex; align-items: center; gap: 12px; padding: 12px; border: 3px solid var(--ink); }
 
+/* Multi-line entries: line breaks and bullets. */
+.entry { display: flex; flex-direction: column; gap: 0.3em; }
+.entry-line { display: block; }
+.entry-list { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 0.15em; }
+.entry-list li::marker { color: var(--accent-text); }
+.quote-long { font-size: 24px; line-height: 1.2; letter-spacing: -0.3px; }
+.snippet-clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
 @media (min-width: 768px) {
   .wrap { padding: 0 24px 80px; gap: 48px; }
   .logo { font-size: 36px; }
   .quote { font-size: 48px; }
+  .quote-long { font-size: 32px; }
   .masthead h1 { font-size: 132px; }
   .today { padding: 48px 40px 32px; }
 }

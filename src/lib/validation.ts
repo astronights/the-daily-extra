@@ -9,6 +9,8 @@ export const LIMITS = {
   review: 500,
   lineMin: 10,
   lineMax: 200,
+  /** Entries with line breaks (bullets, lists) get more room. */
+  multiLineMax: 500,
   descriptionMin: 5,
   descriptionMax: 120,
   wordMax: 20,
@@ -64,14 +66,37 @@ export function parseReview(form: FormData): Parsed<ReviewInput> {
   return { ok: true, value: { score: score!, name: optional(name), body: optional(body) } };
 }
 
+/**
+ * Tidies one entry but keeps its line breaks: trims each line, squeezes
+ * repeated spaces, drops empty lines inside it. "•" bullets become "- ".
+ */
+export function cleanEntry(raw: string): string {
+  return raw
+    .split(/\r?\n/)
+    .map((l) => l.replace(/[^\S\n]+/g, " ").trim().replace(/^[•·*]\s+/, "- "))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Longest allowed entry: more room when it spans several lines. */
+export function maxLength(entry: string): number {
+  return entry.includes("\n") ? LIMITS.multiLineMax : LIMITS.lineMax;
+}
+
+/** The text of a multi-line field, tidied with cleanEntry. */
+function entryText(form: FormData, key: string): string {
+  const v = form.get(key);
+  return typeof v === "string" ? cleanEntry(v) : "";
+}
+
 export type LineInput = { body: string; credit: string | null };
 
 export function parseLine(form: FormData): Parsed<LineInput> {
   const errors: FieldErrors = {};
-  const body = text(form, "body");
+  const body = entryText(form, "body");
   const credit = text(form, "credit");
   if (body.length < LIMITS.lineMin) errors.body = "Give us a bit more than that.";
-  else if (body.length > LIMITS.lineMax) errors.body = `Keep it under ${LIMITS.lineMax} characters.`;
+  else if (body.length > maxLength(body)) errors.body = `Keep it under ${maxLength(body)} characters.`;
   if (credit.length > LIMITS.name) errors.credit = `Keep your handle under ${LIMITS.name} characters.`;
   if (Object.keys(errors).length) return { ok: false, errors };
   return { ok: true, value: { body, credit: optional(credit) } };
@@ -87,22 +112,37 @@ export function normalizeSlug(raw: string): string {
     .replace(/-+/g, "-");
 }
 
+/** How pasted text is split into entries. */
+export type EntryFormat = "lines" | "blocks";
+
+export function entryFormat(raw: unknown): EntryFormat {
+  return raw === "blocks" ? "blocks" : "lines";
+}
+
 /**
- * Splits pasted text into lines: trims each, drops blanks and
- * case-insensitive duplicates. Used in the browser (live counter) and
- * on the server, so both count the same way.
+ * Splits pasted text into entries, dropping blanks and case-insensitive
+ * duplicates. Used in the browser (live counter) and on the server, so
+ * both count the same way.
+ *   "lines":  one entry per line
+ *   "blocks": entries separated by a blank line; each can span lines
  */
-export function splitLines(raw: string): string[] {
+export function splitEntries(raw: string, format: EntryFormat = "lines"): string[] {
+  const parts = format === "blocks" ? raw.split(/\r?\n[^\S\r\n]*\r?\n/) : raw.split(/\r?\n/);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const line of raw.split(/\r?\n/)) {
-    const clean = line.replace(/\s+/g, " ").trim();
+  for (const part of parts) {
+    const clean = format === "blocks" ? cleanEntry(part) : part.replace(/\s+/g, " ").trim();
     const key = clean.toLowerCase();
     if (!clean || seen.has(key)) continue;
     seen.add(key);
     out.push(clean);
   }
   return out;
+}
+
+/** One entry per line. */
+export function splitLines(raw: string): string[] {
+  return splitEntries(raw, "lines");
 }
 
 export type PitchInput = {
@@ -122,7 +162,7 @@ export function parsePitch(form: FormData): Parsed<PitchInput> {
   const meterLabel = text(form, "meterLabel");
   const credit = text(form, "credit");
   const rawLines = form.get("lines");
-  const lines = splitLines(typeof rawLines === "string" ? rawLines : "");
+  const lines = splitEntries(typeof rawLines === "string" ? rawLines : "", entryFormat(form.get("format")));
 
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length < 2 || slug.length > 24) {
     errors.slug = "Use 2–24 letters, numbers or dashes.";
@@ -141,8 +181,8 @@ export function parsePitch(form: FormData): Parsed<PitchInput> {
   } else if (lines.length > LIMITS.pitchLinesMax) {
     errors.lines = `Up to ${LIMITS.pitchLinesMax} lines per pitch.`;
   } else {
-    const long = lines.findIndex((l) => l.length > LIMITS.lineMax);
-    if (long !== -1) errors.lines = `Line ${long + 1} is over ${LIMITS.lineMax} characters.`;
+    const long = lines.findIndex((l) => l.length > maxLength(l));
+    if (long !== -1) errors.lines = `Entry ${long + 1} is over ${maxLength(lines[long])} characters.`;
   }
   if (credit.length > LIMITS.name) errors.credit = `Keep your handle under ${LIMITS.name} characters.`;
 
@@ -170,10 +210,31 @@ export function parsePackEdit(form: FormData): Parsed<PackEdit> {
 
 /** Admin fixing a line: text 1–200 characters. */
 export function parseLineEdit(form: FormData): Parsed<{ body: string }> {
-  const body = text(form, "body");
+  const body = entryText(form, "body");
   if (!body) return { ok: false, errors: { body: "The line can't be empty." } };
-  if (body.length > LIMITS.lineMax) return { ok: false, errors: { body: `Keep it under ${LIMITS.lineMax} characters.` } };
+  if (body.length > maxLength(body)) return { ok: false, errors: { body: `Keep it under ${maxLength(body)} characters.` } };
   return { ok: true, value: { body } };
+}
+
+export type BodyBlock = { kind: "text"; text: string } | { kind: "list"; items: string[] };
+
+/**
+ * Groups an entry's lines for display: runs of "- " lines become a
+ * bulleted list, every other line is its own line of text.
+ */
+export function bodyBlocks(body: string): BodyBlock[] {
+  const blocks: BodyBlock[] = [];
+  for (const line of body.split("\n")) {
+    const bullet = /^- (.*)$/.exec(line);
+    const last = blocks[blocks.length - 1];
+    if (bullet) {
+      if (last?.kind === "list") last.items.push(bullet[1]);
+      else blocks.push({ kind: "list", items: [bullet[1]] });
+    } else {
+      blocks.push({ kind: "text", text: line });
+    }
+  }
+  return blocks;
 }
 
 /** Splits "a *b* c" into plain and highlighted parts. */

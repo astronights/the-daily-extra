@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { followAction, postReview, submitLine } from "@/app/actions";
 import { CopyShare, Countdown, LineForm, ReviewForm } from "@/components/client";
-import { CheckIcon, Footer, Header, Highlighted, Meter, Page, PlusIcon } from "@/components/ui";
+import { CheckIcon, EntryBody, Footer, Header, Meter, Page, PlusIcon, quoteSize } from "@/components/ui";
 import { formatDay, formatIssue, issueNumber, timeAgo, utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import * as repo from "@/lib/repo";
@@ -56,9 +56,9 @@ export default async function PackPage({ params }: Props) {
         {daily ? (
           <div className="card today">
             <span className="sticker">Today&apos;s {pack.noun}</span>
-            <p className="quote">
-              “<Highlighted body={daily.body} />”
-            </p>
+            <div className={quoteSize(daily.body)}>
+              <EntryBody body={daily.body} />
+            </div>
             <div className="row">
               <Meter score={daily.avgScore} ratings={daily.ratings} label={pack.meterLabel} />
               {daily.author ? <span className="mono muted">· {daily.author}</span> : null}

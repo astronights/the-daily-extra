@@ -8,7 +8,7 @@ import type { FormState } from "@/lib/form-state";
 import { PALETTE, type Tone } from "@/lib/palette";
 import * as repo from "@/lib/repo";
 import { isAdmin, signIn, signOut } from "@/lib/session";
-import { intIn, parseLineEdit, parsePackEdit, parsePitch } from "@/lib/validation";
+import { cleanEntry, intIn, maxLength, parseLineEdit, parsePackEdit, parsePitch } from "@/lib/validation";
 
 async function requireAdmin(): Promise<void> {
   if (!(await isAdmin())) redirect("/admin");
@@ -38,10 +38,10 @@ export async function logout(): Promise<void> {
 export async function moderateLineAction(form: FormData): Promise<void> {
   await requireAdmin();
   const id = intIn(field(form, "id"), 1, 2 ** 31 - 1);
-  const body = field(form, "body").replace(/\s+/g, " ").trim();
+  const body = cleanEntry(field(form, "body"));
   const db = await getDb();
   if (id) {
-    if (field(form, "decision") === "approve") await repo.approveLine(db, id, body && body.length <= 200 ? body : undefined);
+    if (field(form, "decision") === "approve") await repo.approveLine(db, id, body && body.length <= maxLength(body) ? body : undefined);
     else await repo.rejectLine(db, id);
   }
   revalidatePath("/admin");

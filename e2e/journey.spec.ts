@@ -27,7 +27,7 @@ async function fillPackForm(page: Page, slug: string, count = 100) {
   await page.getByLabel("What does it give you, once a day?").fill(`The ${slug} pack, daily`);
   await page.getByLabel("“Today's …”").fill("drama");
   await page.getByLabel("Rated on…").fill("Spice");
-  await page.getByLabel("Lines (one per line)").fill(lines(slug, count));
+  await page.getByLabel("Entries (one per line)").fill(lines(slug, count));
 }
 
 test("home works before any pack exists", async ({ page }) => {
@@ -44,7 +44,7 @@ test("admin creates a pack from pasted lines", async ({ page }) => {
   await page.getByRole("button", { name: "Create pack" }).click();
   await expect(page.getByText("We need at least 30 different lines. You have 29.")).toBeVisible();
 
-  await page.getByLabel("Lines (one per line)").fill(lines(`drama-${suffix}`, 120));
+  await page.getByLabel("Entries (one per line)").fill(lines(`drama-${suffix}`, 120));
   await expect(page.getByText("120 / 30")).toBeVisible();
   await page.getByRole("button", { name: "Create pack" }).click();
   await expect(page.getByText(`/drama-${suffix} is live with 120 lines.`)).toBeVisible();
@@ -156,6 +156,33 @@ test("pitch → pile → upvote → launch", async ({ page }) => {
   await expect(page.getByText("Today's drama")).toBeVisible();
   await page.goto(`/explore?q=${slug}&f=live`);
   await expect(page.getByRole("link", { name: `/${slug}`, exact: true })).toBeVisible();
+});
+
+test("multi-line entries: blank-line format, bullets on the card, line breaks when copied", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const slug = `lists-${suffix}`;
+  const blocks = Array.from({ length: 30 }, (_, i) => `Rules ${i + 1} for tonight:\n- no phones\n- I pick the movie`).join("\n\n");
+
+  await signIn(page);
+  await page.goto("/admin?tab=new");
+  await page.getByLabel("Pack name").fill(slug);
+  await page.getByLabel("What does it give you, once a day?").fill("A list of rules a day");
+  await page.getByLabel("“Today's …”").fill("rules");
+  await page.getByLabel("Rated on…").fill("Chaos");
+  await page.getByLabel(/Entries \(one per line\)/).fill(blocks);
+  // Pasted with blank lines while set to one-per-line: the box offers to switch.
+  await page.getByRole("button", { name: "Switch" }).click();
+  await expect(page.getByText("30 / 30")).toBeVisible();
+  await page.getByRole("button", { name: "Create pack" }).click();
+  await expect(page.getByText(`/${slug} is live with 30 lines.`)).toBeVisible();
+
+  await page.goto(`/${slug}`);
+  const card = page.locator(".quote");
+  await expect(card.locator(".entry-list li")).toHaveCount(2);
+  await expect(card.getByText("I pick the movie")).toBeVisible();
+  await page.getByRole("button", { name: "Copy & send" }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toMatch(/^Rules \d+ for tonight:\n- no phones\n- I pick the movie$/);
 });
 
 test("unknown pack shows the 404 page", async ({ page }) => {

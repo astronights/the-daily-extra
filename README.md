@@ -12,7 +12,7 @@ Built with Next.js and Postgres. Phone first.
 | `/[pack]` | Today's line, copy & share, score + review, field reports, submit a line |
 | `/[pack]/reports` | All of today's reviews, sortable |
 | `/explore` | Search live packs and the pile |
-| `/pitch` | Pitch a new pack (30+ lines, paste or `.txt`) |
+| `/pitch` | Pitch a new pack (30+ entries, paste or `.txt`, one per line or blank-line separated) |
 | `/colours` | The 10-colour cycle packs are given |
 | `/admin` | Approve lines and pitches, launch packs, create your own packs, and edit any pack or line to fix typos |
 
@@ -23,6 +23,7 @@ How it behaves:
 - Follows and upvotes need no account: they're kept in the visitor's cookies.
 - Spam protection: a hidden honeypot field and per-IP limits (5 reviews / 10 min, 5 lines / hour, 3 pitches / hour). IPs are stored only as salted hashes.
 - Wrap words in `*asterisks*` in a line to highlight them.
+- Entries can span several lines: in the paste box pick **Blank line between**, separate entries with an empty line, and start bullets with `- `. Multi-line entries can be up to 500 characters (single lines 200). Line breaks are kept when copied.
 
 ## Run it locally
 
