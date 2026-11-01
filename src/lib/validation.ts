@@ -7,16 +7,28 @@ export type Parsed<T> = { ok: true; value: T } | { ok: false; errors: FieldError
 export const LIMITS = {
   name: 40,
   review: 500,
-  entryMin: 10,
-  entryMax: 200,
+  lineMin: 10,
+  lineMax: 200,
   descriptionMin: 5,
   descriptionMax: 120,
-  sampleMax: 200,
-  samplesMax: 5,
+  wordMax: 20,
+  pitchLinesMin: 100,
+  pitchLinesMax: 1000,
 } as const;
 
-/** URLs that a pack can never take. */
-export const RESERVED_SLUGS = new Set(["admin", "api", "about", "static", "public", "favicon.ico", "robots.txt", "sitemap.xml"]);
+/** Addresses a pack can never take, because the site uses them. */
+export const RESERVED_SLUGS = new Set([
+  "admin",
+  "api",
+  "explore",
+  "pitch",
+  "colours",
+  "colors",
+  "about",
+  "reports",
+  "static",
+  "public",
+]);
 
 function text(form: FormData, key: string): string {
   const v = form.get(key);
@@ -27,7 +39,7 @@ function optional(value: string): string | null {
   return value === "" ? null : value;
 }
 
-function intIn(raw: string, min: number, max: number): number | null {
+export function intIn(raw: string, min: number, max: number): number | null {
   if (!/^\d+$/.test(raw)) return null;
   const n = Number(raw);
   return n >= min && n <= max ? n : null;
@@ -52,20 +64,17 @@ export function parseReview(form: FormData): Parsed<ReviewInput> {
   return { ok: true, value: { score: score!, name: optional(name), body: optional(body) } };
 }
 
-export type EntryInput = { body: string; credit: string | null; spice: number };
+export type LineInput = { body: string; credit: string | null };
 
-export function parseEntry(form: FormData): Parsed<EntryInput> {
+export function parseLine(form: FormData): Parsed<LineInput> {
   const errors: FieldErrors = {};
   const body = text(form, "body");
   const credit = text(form, "credit");
-  const spiceRaw = text(form, "spice");
-  const spice = spiceRaw === "" ? 3 : intIn(spiceRaw, 1, 5);
-  if (body.length < LIMITS.entryMin) errors.body = "Give us a bit more than that.";
-  else if (body.length > LIMITS.entryMax) errors.body = `Keep it under ${LIMITS.entryMax} characters.`;
+  if (body.length < LIMITS.lineMin) errors.body = "Give us a bit more than that.";
+  else if (body.length > LIMITS.lineMax) errors.body = `Keep it under ${LIMITS.lineMax} characters.`;
   if (credit.length > LIMITS.name) errors.credit = `Keep your handle under ${LIMITS.name} characters.`;
-  if (spice === null) errors.spice = "Spice goes from 1 to 5.";
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, value: { body, credit: optional(credit), spice: spice! } };
+  return { ok: true, value: { body, credit: optional(credit) } };
 }
 
 /** "/Bad Excuses " -> "bad-excuses" */
@@ -78,34 +87,67 @@ export function normalizeSlug(raw: string): string {
     .replace(/-+/g, "-");
 }
 
-export type PitchInput = { slug: string; description: string; samples: string[]; credit: string | null };
+/**
+ * Splits pasted text into lines: trims each, drops blanks and
+ * case-insensitive duplicates. Used in the browser (live counter) and
+ * on the server, so both count the same way.
+ */
+export function splitLines(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const clean = line.replace(/\s+/g, " ").trim();
+    const key = clean.toLowerCase();
+    if (!clean || seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+  }
+  return out;
+}
+
+export type PitchInput = {
+  slug: string;
+  description: string;
+  noun: string;
+  meterLabel: string;
+  lines: string[];
+  credit: string | null;
+};
 
 export function parsePitch(form: FormData): Parsed<PitchInput> {
   const errors: FieldErrors = {};
   const slug = normalizeSlug(text(form, "slug"));
   const description = text(form, "description");
+  const noun = text(form, "noun").toLowerCase();
+  const meterLabel = text(form, "meterLabel");
   const credit = text(form, "credit");
-  const rawSamples = form.get("samples");
-  const samples = (typeof rawSamples === "string" ? rawSamples : "")
-    .split("\n")
-    .map((l) => l.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+  const rawLines = form.get("lines");
+  const lines = splitLines(typeof rawLines === "string" ? rawLines : "");
 
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length < 2 || slug.length > 24) {
     errors.slug = "Use 2–24 letters, numbers or dashes.";
   } else if (RESERVED_SLUGS.has(slug)) {
-    errors.slug = "That name is taken by the site itself. Try another.";
+    errors.slug = "That name is used by the site itself. Try another.";
   }
   if (description.length < LIMITS.descriptionMin) errors.description = "Tell us what it does.";
   else if (description.length > LIMITS.descriptionMax)
     errors.description = `Keep it under ${LIMITS.descriptionMax} characters.`;
-  if (samples.length > LIMITS.samplesMax) errors.samples = `Up to ${LIMITS.samplesMax} sample lines.`;
-  else if (samples.some((s) => s.length > LIMITS.sampleMax))
-    errors.samples = `Each line has to be under ${LIMITS.sampleMax} characters.`;
+  if (!noun) errors.noun = "What's one of these called?";
+  else if (noun.length > LIMITS.wordMax) errors.noun = `Keep it under ${LIMITS.wordMax} characters.`;
+  if (!meterLabel) errors.meterLabel = "What should each one be rated on?";
+  else if (meterLabel.length > LIMITS.wordMax) errors.meterLabel = `Keep it under ${LIMITS.wordMax} characters.`;
+  if (lines.length < LIMITS.pitchLinesMin) {
+    errors.lines = `We need at least ${LIMITS.pitchLinesMin} different lines. You have ${lines.length}.`;
+  } else if (lines.length > LIMITS.pitchLinesMax) {
+    errors.lines = `Up to ${LIMITS.pitchLinesMax} lines per pitch.`;
+  } else {
+    const long = lines.findIndex((l) => l.length > LIMITS.lineMax);
+    if (long !== -1) errors.lines = `Line ${long + 1} is over ${LIMITS.lineMax} characters.`;
+  }
   if (credit.length > LIMITS.name) errors.credit = `Keep your handle under ${LIMITS.name} characters.`;
 
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, value: { slug, description, samples, credit: optional(credit) } };
+  return { ok: true, value: { slug, description, noun, meterLabel, lines, credit: optional(credit) } };
 }
 
 /** Splits "a *b* c" into plain and highlighted parts. */

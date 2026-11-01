@@ -1,19 +1,17 @@
-// Runs before `next build`. Creates tables and starter content in the
-// Postgres database at DATABASE_URL. Without it, nothing to do: the app
-// sets up its own local database on first use.
-import { neon } from "@neondatabase/serverless";
-import { SCHEMA_SQL, seedStatements } from "../src/lib/schema.ts";
+// Applies pending files in /migrations to the database.
+//   DATABASE_URL=postgres://… npm run db:migrate   (Neon, run by CI on main)
+//   npm run db:migrate                             (local ./.pglite database)
+import { openDb } from "../src/lib/db.ts";
+import { loadMigrations, runMigrations } from "../src/lib/migrations.ts";
 
-const url = process.env.DATABASE_URL;
-if (!url) {
-  console.log("[migrate] DATABASE_URL not set, skipping (local database is set up on first request).");
-  process.exit(0);
+const target = process.env.DATABASE_URL ? "DATABASE_URL" : "local ./.pglite";
+const migrations = loadMigrations();
+const db = await openDb();
+const applied = await runMigrations(db, migrations);
+
+if (applied.length) {
+  for (const name of applied) console.log(`[migrate] applied ${name}`);
+} else {
+  console.log(`[migrate] ${target} is up to date (${migrations.length} migrations).`);
 }
-
-const sql = neon(url);
-const statements = SCHEMA_SQL.split(/;\s*$/m)
-  .map((s) => s.trim())
-  .filter(Boolean);
-for (const statement of statements) await sql.query(statement);
-for (const { text, params } of seedStatements()) await sql.query(text, params);
-console.log(`[migrate] schema ready (${statements.length} statements) and starter content seeded.`);
+process.exit(0);

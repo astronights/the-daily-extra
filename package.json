@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/migrate.mjs && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "vitest run",
@@ -30,5 +30,6 @@
     "@types/react-dom": "^19.3.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
-  }
+  },
+  "type": "module"
 }

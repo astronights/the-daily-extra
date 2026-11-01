@@ -1,5 +1,4 @@
 import { neon } from "@neondatabase/serverless";
-import { SCHEMA_SQL, seedStatements } from "./schema.ts";
 
 /** The small slice of a Postgres client the app needs. */
 export interface Db {
@@ -7,11 +6,11 @@ export interface Db {
   exec(sql: string): Promise<void>;
 }
 
-/** Splits a schema file into single statements (HTTP drivers run one at a time). */
+/** Splits a migration file into single statements (the HTTP driver runs one at a time). */
 export function splitStatements(sql: string): string[] {
   return sql
     .split(/;\s*$/m)
-    .map((s) => s.trim())
+    .map((s) => s.replace(/^\s*--.*$/gm, "").trim())
     .filter(Boolean);
 }
 
@@ -38,24 +37,27 @@ export async function createPgliteDb(dataDir = "memory://"): Promise<Db> {
   };
 }
 
-/** Creates tables and inserts starter content. Safe to run on every deploy. */
-export async function migrate(db: Db): Promise<void> {
-  await db.exec(SCHEMA_SQL);
-  for (const { text, params } of seedStatements()) await db.query(text, params);
+/** Opens the database for scripts: Neon when DATABASE_URL is set, else the local one. */
+export async function openDb(): Promise<Db> {
+  const url = process.env.DATABASE_URL;
+  if (url) return createNeonDb(url);
+  return createPgliteDb(process.env.PGLITE_DIR ?? "./.pglite");
 }
 
 const globalForDb = globalThis as unknown as { __thedailyDb?: Promise<Db> };
 
+/**
+ * The app's database. With DATABASE_URL (production) the schema is
+ * managed by `npm run db:migrate` in CI. Without it, a local database is
+ * used and the same migration files are applied on first use.
+ */
 export function getDb(): Promise<Db> {
   globalForDb.__thedailyDb ??= (async () => {
     const url = process.env.DATABASE_URL;
     if (url) return createNeonDb(url);
-    const dir = process.env.PGLITE_DIR ?? (process.env.VERCEL ? "memory://" : "./.pglite");
-    if (process.env.VERCEL) {
-      console.warn("DATABASE_URL is not set: using a temporary in-memory database. Data will not persist.");
-    }
-    const db = await createPgliteDb(dir);
-    await migrate(db);
+    const db = await createPgliteDb(process.env.PGLITE_DIR ?? "./.pglite");
+    const { runMigrations } = await import("./migrations.ts");
+    await runMigrations(db);
     return db;
   })();
   return globalForDb.__thedailyDb;
