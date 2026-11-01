@@ -12,7 +12,7 @@ Built with Next.js and Postgres. Phone first.
 | `/[pack]` | Today's line, copy & share, score + review, field reports, submit a line |
 | `/[pack]/reports` | All of today's reviews, sortable |
 | `/explore` | Search live packs and the pile |
-| `/pitch` | Pitch a new pack (100+ lines, paste or `.txt`) |
+| `/pitch` | Pitch a new pack (30+ lines, paste or `.txt`) |
 | `/colours` | The 10-colour cycle packs are given |
 | `/admin` | Approve lines and pitches, launch packs, create your own packs |
 

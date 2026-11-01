@@ -215,7 +215,7 @@ export function LineForm({ action, slug }: { action: Action; slug: string }) {
   );
 }
 
-/** Big scrollable box for 100+ lines, with .txt upload and a live count. */
+/** Big scrollable box for 30+ lines, with .txt upload and a live count. */
 export function LinesField({ error }: { error?: string }) {
   const [value, setValue] = useState("");
   const count = splitLines(value).length;
@@ -329,7 +329,7 @@ export function PackForm({
       <fieldset className="fieldset">
         <legend>2 · The lines</legend>
         <p className="hint" style={{ fontSize: 14 }}>
-          At least {LIMITS.pitchLinesMin}, one per line. That&apos;s over three months of dailies. Paste them in or upload a .txt file.
+          At least {LIMITS.pitchLinesMin}, one per line. That&apos;s a month of dailies. Paste them in or upload a .txt file.
           Wrap words in *asterisks* to highlight them.
         </p>
         <LinesField error={e.lines} />

@@ -128,7 +128,7 @@ export default async function Home() {
           <br />a pack.
         </span>
         <span className="lede" style={{ fontSize: 15 }}>
-          Got an idea for a daily? Name it and bring 100 lines.
+          Got an idea for a daily? Name it and bring 30 lines.
         </span>
         <span className="btn btn-ink" style={{ alignSelf: "flex-start", boxShadow: "3px 3px 0 var(--accent)" }}>
           Start a pitch

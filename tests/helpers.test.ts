@@ -96,10 +96,10 @@ describe("validation", () => {
     expect(normalizeSlug("a__b--c")).toBe("a-b-c");
   });
 
-  it("needs 100+ lines and a valid name to pitch", () => {
+  it("needs 30+ lines and a valid name to pitch", () => {
     const base = { slug: "excuses", description: "An excuse a day", noun: "Excuse", meterLabel: "Believability" };
     expect(parsePitch(form({ ...base, lines: many(100) }))).toMatchObject({ ok: true, value: { slug: "excuses", noun: "excuse" } });
-    expect(parsePitch(form({ ...base, lines: many(99) }))).toMatchObject({ ok: false, errors: { lines: expect.stringContaining("You have 99") } });
+    expect(parsePitch(form({ ...base, lines: many(29) }))).toMatchObject({ ok: false, errors: { lines: expect.stringContaining("You have 29") } });
     expect(parsePitch(form({ ...base, lines: many(1001) }))).toMatchObject({ ok: false, errors: { lines: expect.any(String) } });
     expect(parsePitch(form({ ...base, slug: "admin", lines: many(100) }))).toMatchObject({ ok: false, errors: { slug: expect.any(String) } });
     expect(parsePitch(form({ ...base, slug: "a", lines: many(100) }))).toMatchObject({ ok: false, errors: { slug: expect.any(String) } });

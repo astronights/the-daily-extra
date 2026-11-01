@@ -12,7 +12,7 @@ export const LIMITS = {
   descriptionMin: 5,
   descriptionMax: 120,
   wordMax: 20,
-  pitchLinesMin: 100,
+  pitchLinesMin: 30,
   pitchLinesMax: 1000,
 } as const;
 

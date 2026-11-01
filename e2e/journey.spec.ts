@@ -39,13 +39,13 @@ test("home works before any pack exists", async ({ page }) => {
 test("admin creates a pack from pasted lines", async ({ page }) => {
   await signIn(page);
   await page.getByRole("link", { name: "New pack" }).click();
-  await fillPackForm(page, `drama-${suffix}`, 99);
-  await expect(page.getByText("99 / 100")).toBeVisible();
+  await fillPackForm(page, `drama-${suffix}`, 29);
+  await expect(page.getByText("29 / 30")).toBeVisible();
   await page.getByRole("button", { name: "Create pack" }).click();
-  await expect(page.getByText("We need at least 100 different lines. You have 99.")).toBeVisible();
+  await expect(page.getByText("We need at least 30 different lines. You have 29.")).toBeVisible();
 
   await page.getByLabel("Lines (one per line)").fill(lines(`drama-${suffix}`, 120));
-  await expect(page.getByText("120 / 100")).toBeVisible();
+  await expect(page.getByText("120 / 30")).toBeVisible();
   await page.getByRole("button", { name: "Create pack" }).click();
   await expect(page.getByText(`/drama-${suffix} is live with 120 lines.`)).toBeVisible();
 });
