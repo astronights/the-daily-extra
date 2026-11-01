@@ -117,7 +117,6 @@ export default async function AdminPage({ searchParams }: Props) {
     repo.listPacksByStatus(db, "pile"),
     repo.listLivePacks(db),
   ]);
-  const packBySlug = new Map(packs.map((p) => [p.slug, p]));
   const next = nextTone(packs.length).name;
   // Lines are only needed for the tab being shown.
   const shown = tab === "pitches" ? pendingPitches : tab === "pile" ? pile : [];
@@ -148,7 +147,6 @@ export default async function AdminPage({ searchParams }: Props) {
       {tab === "lines" ? (
         pendingLines.length ? (
           pendingLines.map((l) => {
-            const pack = packBySlug.get(l.packSlug);
             return (
               <form key={l.id} action={moderateLineAction} className="card" style={{ padding: 18, gap: 14, boxShadow: "5px 5px 0 var(--ink)" }}>
                 <input type="hidden" name="id" value={l.id} />
@@ -161,16 +159,6 @@ export default async function AdminPage({ searchParams }: Props) {
                 <label className="field">
                   The line (fix typos before approving)
                   <textarea name="body" rows={2} defaultValue={l.body} maxLength={200} className="textarea" style={{ fontSize: 18, fontWeight: 700 }} />
-                </label>
-                <label className="field" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                  {pack?.meterLabel ?? "Level"}
-                  <select name="level" className="select" defaultValue="3" style={{ width: "auto" }}>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
                 </label>
                 <div className="grid-2">
                   <button type="submit" name="decision" value="approve" className="btn btn-accent">

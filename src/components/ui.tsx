@@ -102,14 +102,27 @@ export function Highlighted({ body }: { body: string }) {
   );
 }
 
-export function Meter({ level, label }: { level: number; label: string }) {
+/** The pack's meter (e.g. Toxicity), filled from readers' average rating of this line. */
+export function Meter({ score, ratings, label }: { score: number | null; ratings: number; label: string }) {
+  if (score === null) {
+    return (
+      <span className="row mono" style={{ gap: 10 }}>
+        <span>{label}</span>
+        <span className="muted">Not rated yet</span>
+      </span>
+    );
+  }
+  const filled = Math.round(score);
   return (
     <span className="row mono" style={{ gap: 10 }}>
       <span>{label}</span>
-      <span className="meter" role="img" aria-label={`${level} out of 5`}>
+      <span className="meter" role="img" aria-label={`${score} out of 5 from ${ratings} ${ratings === 1 ? "rating" : "ratings"}`}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <span key={n} className={n <= level ? "on" : undefined} />
+          <span key={n} className={n <= filled ? "on" : undefined} />
         ))}
+      </span>
+      <span className="muted">
+        {ratings} {ratings === 1 ? "rating" : "ratings"}
       </span>
     </span>
   );

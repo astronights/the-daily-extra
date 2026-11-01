@@ -158,8 +158,8 @@ describe("admin edit validation", () => {
     expect(parsePackEdit(form({ description: "x", noun: "", meterLabel: "Toxicity" }))).toMatchObject({ ok: false });
   });
   it("checks line edits", () => {
-    expect(parseLineEdit(form({ body: "  fixed   line ", level: "4" }))).toEqual({ ok: true, value: { body: "fixed line", level: 4 } });
-    expect(parseLineEdit(form({ body: "", level: "4" }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
-    expect(parseLineEdit(form({ body: "ok", level: "9" }))).toMatchObject({ ok: false, errors: { level: expect.any(String) } });
+    expect(parseLineEdit(form({ body: "  fixed   line " }))).toEqual({ ok: true, value: { body: "fixed line" } });
+    expect(parseLineEdit(form({ body: "" }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
+    expect(parseLineEdit(form({ body: "x".repeat(201) }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
   });
 });

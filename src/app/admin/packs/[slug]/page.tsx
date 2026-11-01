@@ -17,7 +17,8 @@ type Props = { params: Promise<{ slug: string }> };
 function note(line: repo.EditableLine): string {
   if (line.status === "rejected") return "rejected";
   if (line.status === "pending") return "pending";
-  return line.shownOn ? `shown ${formatDay(line.shownOn).replace(/^\w+ · /, "")}` : "not shown yet";
+  const rated = line.avgScore === null ? "not rated" : `${line.avgScore}/5 from ${line.ratings}`;
+  return line.shownOn ? `shown ${formatDay(line.shownOn).replace(/^\w+ · /, "")} · ${rated}` : "not shown yet";
 }
 
 export default async function EditPack({ params }: Props) {
@@ -59,10 +60,10 @@ export default async function EditPack({ params }: Props) {
           Lines
         </h2>
         <p className="hint" style={{ fontSize: 14, marginBottom: 8 }}>
-          Fix typos or change a line&apos;s {pack.meterLabel}. Wrap words in *asterisks* to highlight them.
+          Fix typos here. Each line&apos;s {pack.meterLabel} comes from readers&apos; ratings. Wrap words in *asterisks* to highlight them.
         </p>
         {lines.map((l) => (
-          <EditLineForm key={l.id} action={updateLineAction} line={{ id: l.id, body: l.body, level: l.level, note: note(l) }} meterLabel={pack.meterLabel} />
+          <EditLineForm key={l.id} action={updateLineAction} line={{ id: l.id, body: l.body, note: note(l) }} />
         ))}
       </section>
     </Page>

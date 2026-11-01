@@ -23,7 +23,13 @@ export type Pack = {
 /** A pack that is live always has its colours and launch day. */
 export type LivePack = Pack & { status: "live"; accent: string; background: string; launchedOn: string };
 
-export type Daily = { entryId: number; body: string; author: string | null; level: number };
+/** A line's readers' rating: average score across every day it's been shown. */
+export type LineRating = { avgScore: number | null; ratings: number };
+
+export type Daily = { entryId: number; body: string; author: string | null } & LineRating;
+
+const LINE_RATING = `(SELECT round(avg(r.score), 1)::float8 FROM reviews r WHERE r.entry_id = e.id) AS "avgScore",
+  (SELECT count(*)::int FROM reviews r WHERE r.entry_id = e.id) AS ratings`;
 
 export type Report = { id: number; score: number; name: string | null; body: string; createdAt: number };
 
@@ -112,7 +118,7 @@ export async function changeVotes(db: Db, slug: string, delta: 1 | -1): Promise<
 
 async function readPick(db: Db, slug: string, day: string): Promise<Daily | null> {
   const rows = await db.query<Daily>(
-    `SELECT id AS "entryId", body, author, level::int AS level FROM entries WHERE pack_slug = $1 AND shown_on = $2`,
+    `SELECT e.id AS "entryId", e.body, e.author, ${LINE_RATING} FROM entries e WHERE e.pack_slug = $1 AND e.shown_on = $2`,
     [slug, day],
   );
   return rows[0] ?? null;
@@ -202,16 +208,12 @@ export async function listReports(
 
 export async function addReview(
   db: Db,
-  r: { slug: string; day: string; score: number; name: string | null; body: string | null; ipHash: string },
+  r: { slug: string; day: string; entryId: number; score: number; name: string | null; body: string | null; ipHash: string },
 ): Promise<void> {
-  await db.query(`INSERT INTO reviews (pack_slug, day, score, name, body, ip_hash) VALUES ($1, $2, $3, $4, $5, $6)`, [
-    r.slug,
-    r.day,
-    r.score,
-    r.name,
-    r.body,
-    r.ipHash,
-  ]);
+  await db.query(
+    `INSERT INTO reviews (pack_slug, day, entry_id, score, name, body, ip_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [r.slug, r.day, r.entryId, r.score, r.name, r.body, r.ipHash],
+  );
 }
 
 // ---------- lines ----------
@@ -261,12 +263,12 @@ export async function packLines(db: Db, slug: string): Promise<string[]> {
 }
 
 /** Approves a pending line, optionally with fixed-up text. */
-export async function approveLine(db: Db, id: number, level: number, body?: string): Promise<"ok" | "duplicate"> {
+export async function approveLine(db: Db, id: number, body?: string): Promise<"ok" | "duplicate"> {
   try {
-    await db.query(
-      `UPDATE entries SET status = 'approved', level = $2, body = COALESCE($3, body) WHERE id = $1 AND status = 'pending'`,
-      [id, level, body ?? null],
-    );
+    await db.query(`UPDATE entries SET status = 'approved', body = COALESCE($2, body) WHERE id = $1 AND status = 'pending'`, [
+      id,
+      body ?? null,
+    ]);
     return "ok";
   } catch (e) {
     if (isUniqueViolation(e)) return "duplicate";
@@ -278,20 +280,20 @@ function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && "code" in e && (e as { code: unknown }).code === "23505";
 }
 
-export type EditableLine = { id: number; body: string; level: number; status: "pending" | "approved" | "rejected"; shownOn: string | null };
+export type EditableLine = { id: number; body: string; status: "pending" | "approved" | "rejected"; shownOn: string | null } & LineRating;
 
 /** Every line of a pack, for the admin editor. Newest last. */
 export async function listPackLines(db: Db, slug: string): Promise<EditableLine[]> {
   return db.query<EditableLine>(
-    `SELECT id, body, level::int AS level, status, shown_on::text AS "shownOn" FROM entries WHERE pack_slug = $1 ORDER BY id`,
+    `SELECT e.id, e.body, e.status, e.shown_on::text AS "shownOn", ${LINE_RATING} FROM entries e WHERE e.pack_slug = $1 ORDER BY e.id`,
     [slug],
   );
 }
 
-/** Fixes a line's text or level. */
-export async function updateLine(db: Db, id: number, edit: { body: string; level: number }): Promise<"ok" | "duplicate" | "missing"> {
+/** Fixes a line's text. */
+export async function updateLine(db: Db, id: number, edit: { body: string }): Promise<"ok" | "duplicate" | "missing"> {
   try {
-    const rows = await db.query(`UPDATE entries SET body = $2, level = $3 WHERE id = $1 RETURNING 1`, [id, edit.body, edit.level]);
+    const rows = await db.query(`UPDATE entries SET body = $2 WHERE id = $1 RETURNING 1`, [id, edit.body]);
     return rows.length ? "ok" : "missing";
   } catch (e) {
     if (isUniqueViolation(e)) return "duplicate";

@@ -373,16 +373,8 @@ export function LoginForm({ action }: { action: Action }) {
   );
 }
 
-/** Admin: fix one line's text and level. */
-export function EditLineForm({
-  action,
-  line,
-  meterLabel,
-}: {
-  action: Action;
-  line: { id: number; body: string; level: number; note: string };
-  meterLabel: string;
-}) {
+/** Admin: fix one line's text. */
+export function EditLineForm({ action, line }: { action: Action; line: { id: number; body: string; note: string } }) {
   const [state, formAction, pending] = useActionState(action, IDLE);
   const e = state.status === "error" ? state.errors ?? {} : {};
   return (
@@ -396,17 +388,7 @@ export function EditLineForm({
         <textarea name="body" rows={2} defaultValue={line.body} maxLength={LIMITS.lineMax} required className="textarea" aria-invalid={Boolean(e.body)} />
       </label>
       <FieldError id={`err-line-${line.id}`} message={e.body ?? (state.status === "error" ? state.message : undefined)} />
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {meterLabel}
-          <select name="level" className="select" defaultValue={String(line.level)} style={{ width: "auto" }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
         <span className="row" style={{ gap: 10 }}>
           {state.status === "ok" ? (
             <span className="mono" role="status">

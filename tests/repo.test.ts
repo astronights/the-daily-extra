@@ -37,7 +37,7 @@ async function tableNames(d: Db): Promise<string[]> {
 describe("migrations", () => {
   it("create the three tables, no data, and skip files that already ran", async () => {
     const fresh = await createPgliteDb();
-    expect(await runMigrations(fresh)).toEqual(["0001_init.sql"]);
+    expect(await runMigrations(fresh)).toEqual(["0001_init.sql", "0002_ratings_set_level.sql"]);
     expect(await runMigrations(fresh)).toEqual([]);
     expect(await tableNames(fresh)).toEqual(["entries", "packs", "reviews", "schema_migrations"]);
     expect(await repo.listLivePacks(fresh)).toEqual([]);
@@ -57,6 +57,7 @@ describe("migrations", () => {
       "entries_ip_recent_idx",
       "reviews_pack_day_idx",
       "reviews_ip_recent_idx",
+      "reviews_entry_idx",
     ]) {
       expect(names).toContain(idx);
     }
@@ -102,9 +103,10 @@ describe("getDaily", () => {
 
 describe("reviews", () => {
   it("summarise scores and list only reviews with text", async () => {
-    await repo.addReview(db, { slug: "drama", day: DAY, score: 5, name: "a", body: "wild", ipHash: "x" });
-    await repo.addReview(db, { slug: "drama", day: DAY, score: 2, name: null, body: null, ipHash: "x" });
-    await repo.addReview(db, { slug: "drama", day: DAY, score: 4, name: null, body: "fine", ipHash: "y" });
+    const { entryId } = (await repo.getDaily(db, "drama", DAY))!;
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId, score: 5, name: "a", body: "wild", ipHash: "x" });
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId, score: 2, name: null, body: null, ipHash: "x" });
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId, score: 4, name: null, body: "fine", ipHash: "y" });
 
     expect(await repo.ratingSummary(db, "drama", DAY)).toEqual({ count: 3, average: 3.7, counts: [0, 1, 0, 1, 1] });
     expect((await repo.listReports(db, "drama", DAY)).total).toBe(2);
@@ -113,10 +115,28 @@ describe("reviews", () => {
   });
 
   it("count recent posts per IP for rate limiting", async () => {
-    await repo.addReview(db, { slug: "drama", day: DAY, score: 3, name: null, body: null, ipHash: "ip1" });
-    await repo.addReview(db, { slug: "drama", day: DAY, score: 3, name: null, body: null, ipHash: "ip1" });
+    const { entryId } = (await repo.getDaily(db, "drama", DAY))!;
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId, score: 3, name: null, body: null, ipHash: "ip1" });
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId, score: 3, name: null, body: null, ipHash: "ip1" });
     expect(await repo.recentCount(db, "reviews", "ip1", 10)).toBe(2);
     expect(await repo.recentCount(db, "reviews", "ip2", 10)).toBe(0);
+  });
+
+  it("set each line's meter from its ratings, across every day it's shown", async () => {
+    const first = (await repo.getDaily(db, "drama", DAY))!;
+    expect(first).toMatchObject({ avgScore: null, ratings: 0 });
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId: first.entryId, score: 5, name: null, body: null, ipHash: "a" });
+    await repo.addReview(db, { slug: "drama", day: DAY, entryId: first.entryId, score: 4, name: null, body: null, ipHash: "b" });
+    expect(await repo.getDaily(db, "drama", DAY)).toMatchObject({ avgScore: 4.5, ratings: 2 });
+
+    // Use up every line so the first one comes back around; its ratings come with it.
+    for (let i = 1; i <= DRAMA_LINES; i++) await repo.getDaily(db, "drama", day(i));
+    const back = (await repo.getDaily(db, "drama", day(DRAMA_LINES)))!;
+    expect(back.entryId).toBe(first.entryId);
+    await repo.addReview(db, { slug: "drama", day: day(DRAMA_LINES), entryId: back.entryId, score: 3, name: null, body: null, ipHash: "c" });
+    expect(await repo.getDaily(db, "drama", day(DRAMA_LINES))).toMatchObject({ avgScore: 4, ratings: 3 });
+    // Today's verdict still only counts today's reviews.
+    expect((await repo.ratingSummary(db, "drama", day(DRAMA_LINES))).count).toBe(1);
   });
 });
 
@@ -128,7 +148,7 @@ describe("submitted lines", () => {
     const [pending] = await repo.listPendingLines(db);
     expect(pending).toMatchObject({ packSlug: "drama", body: "Who is Kevin?", author: "@me" });
 
-    await repo.approveLine(db, pending.id, 5);
+    await repo.approveLine(db, pending.id);
     expect(await repo.unusedLineCount(db, "drama")).toBe(DRAMA_LINES + 1);
     expect(await repo.listPendingLines(db)).toHaveLength(0);
   });
@@ -209,18 +229,18 @@ describe("admin edits", () => {
     expect(await repo.updatePack(db, "nope", { description: "x", noun: "x", meterLabel: "x", author: null })).toBe(false);
   });
 
-  it("fix a line's text and level, refusing duplicates", async () => {
+  it("fix a line's text, refusing duplicates", async () => {
     const [first, second] = await repo.listPackLines(db, "drama");
-    expect(await repo.updateLine(db, first.id, { body: "Fixed the typo", level: 5 })).toBe("ok");
-    expect((await repo.listPackLines(db, "drama"))[0]).toMatchObject({ body: "Fixed the typo", level: 5 });
-    expect(await repo.updateLine(db, second.id, { body: "FIXED the typo", level: 1 })).toBe("duplicate");
-    expect(await repo.updateLine(db, 999999, { body: "Nope", level: 1 })).toBe("missing");
+    expect(await repo.updateLine(db, first.id, { body: "Fixed the typo" })).toBe("ok");
+    expect((await repo.listPackLines(db, "drama"))[0]).toMatchObject({ body: "Fixed the typo" });
+    expect(await repo.updateLine(db, second.id, { body: "FIXED the typo" })).toBe("duplicate");
+    expect(await repo.updateLine(db, 999999, { body: "Nope" })).toBe("missing");
   });
 
   it("can fix a submitted line while approving it", async () => {
     await repo.addLine(db, { slug: "drama", body: "Who is kevn?", author: null, ipHash: "x" });
     const [pending] = await repo.listPendingLines(db);
-    expect(await repo.approveLine(db, pending.id, 4, "Who is Kevin?")).toBe("ok");
-    expect((await repo.listPackLines(db, "drama")).at(-1)).toMatchObject({ body: "Who is Kevin?", level: 4, status: "approved" });
+    expect(await repo.approveLine(db, pending.id, "Who is Kevin?")).toBe("ok");
+    expect((await repo.listPackLines(db, "drama")).at(-1)).toMatchObject({ body: "Who is Kevin?", status: "approved" });
   });
 });

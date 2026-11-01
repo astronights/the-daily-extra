@@ -60,7 +60,7 @@ export default async function PackPage({ params }: Props) {
               “<Highlighted body={daily.body} />”
             </p>
             <div className="row">
-              <Meter level={daily.level} label={pack.meterLabel} />
+              <Meter score={daily.avgScore} ratings={daily.ratings} label={pack.meterLabel} />
               {daily.author ? <span className="mono muted">· {daily.author}</span> : null}
             </div>
             <CopyShare text={plainText(daily.body)} title={`Today's ${pack.noun} · Extra`} />

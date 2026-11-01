@@ -53,12 +53,13 @@ Three tables (plus `schema_migrations`). Full definitions with comments are in `
 | Table | One row per | Key columns |
 |---|---|---|
 | `packs` | pack, from pitch to live | `slug`, `status` (pending → pile → live, or rejected), `description`, `noun`, `meter_label`, `accent`, `background`, `author`, `votes`, `followers`, `launched_on`, `created_at` |
-| `entries` | line | `pack_slug`, `body`, `author`, `level` (1–5), `status` (pending, approved, rejected), `shown_on` (the day it was the daily), `created_at` |
-| `reviews` | score / review | `pack_slug`, `day`, `score` (1–5), `name`, `body` (empty = rating only), `created_at` |
+| `entries` | line | `pack_slug`, `body`, `author`, `status` (pending, approved, rejected), `shown_on` (the day it was the daily), `created_at` |
+| `reviews` | score / review | `pack_slug`, `day`, `entry_id` (the line rated), `score` (1–5), `name`, `body` (empty = rating only), `created_at` |
 
 - Nothing is deleted: rejected packs and lines stay with status `rejected`. A rejected pack's name stays taken.
 - Who follows or upvoted what is kept in the visitor's cookies (`ex_follows`, `ex_votes`); the tables keep counts only.
 - Each table has an `ip_hash` (salted hash, never the IP) for spam limits.
+- A line's meter (e.g. Toxicity) is its readers' average score across every day it's been shown. New lines show "Not rated yet".
 
 ## Database changes
 

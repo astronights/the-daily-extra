@@ -32,7 +32,9 @@ export async function postReview(_prev: FormState, form: FormData): Promise<Form
   const ipHash = await currentIpHash();
   if (await tooMany("reviews", ipHash)) return { status: "error", message: SLOW_DOWN };
 
-  await repo.addReview(db, { slug, day: utcDay(), ...parsed.value, ipHash });
+  const daily = await repo.getDaily(db, slug, utcDay());
+  if (!daily) return { status: "error", message: "There's no line to rate today." };
+  await repo.addReview(db, { slug, day: utcDay(), entryId: daily.entryId, ...parsed.value, ipHash });
   revalidatePath(`/${slug}`);
   revalidatePath(`/${slug}/reports`);
   return {

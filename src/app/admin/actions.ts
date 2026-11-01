@@ -38,11 +38,10 @@ export async function logout(): Promise<void> {
 export async function moderateLineAction(form: FormData): Promise<void> {
   await requireAdmin();
   const id = intIn(field(form, "id"), 1, 2 ** 31 - 1);
-  const level = intIn(field(form, "level"), 1, 5) ?? 3;
   const body = field(form, "body").replace(/\s+/g, " ").trim();
   const db = await getDb();
   if (id) {
-    if (field(form, "decision") === "approve") await repo.approveLine(db, id, level, body && body.length <= 200 ? body : undefined);
+    if (field(form, "decision") === "approve") await repo.approveLine(db, id, body && body.length <= 200 ? body : undefined);
     else await repo.rejectLine(db, id);
   }
   revalidatePath("/admin");
@@ -58,7 +57,7 @@ export async function updatePackAction(slug: string, _prev: FormState, form: For
   return { status: "ok", message: "Saved." };
 }
 
-/** Fix a line's text or level. */
+/** Fix a line's text. */
 export async function updateLineAction(_prev: FormState, form: FormData): Promise<FormState> {
   await requireAdmin();
   const id = intIn(field(form, "id"), 1, 2 ** 31 - 1);

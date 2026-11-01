@@ -92,6 +92,7 @@ test("reader rates and reviews; it shows in field reports", async ({ page }) => 
   // Browser validation stops an unscored review.
   await expect(page.getByText("Report received.")).toHaveCount(0);
 
+  await expect(page.getByText("Not rated yet")).toBeVisible();
   await page.locator("label[for='score-4']").click();
   await page.getByLabel("What happened? (optional)").fill("They went very quiet. Then laughed.");
   await page.getByLabel("Your name (optional)").fill("@tester");
@@ -102,6 +103,8 @@ test("reader rates and reviews; it shows in field reports", async ({ page }) => 
   await page.reload();
   await expect(page.getByText("They went very quiet. Then laughed.")).toBeVisible();
   await expect(page.locator(".big-score")).toHaveText("4.0");
+  // The line's Spice meter now comes from that rating.
+  await expect(page.getByRole("img", { name: "4 out of 5 from 1 rating" })).toBeVisible();
 
   await page.goto(`/drama-${suffix}/reports?sort=high`);
   await expect(page.getByRole("heading", { name: "Field reports" })).toBeVisible();
@@ -118,7 +121,6 @@ test("reader submits a line and admin approves it", async ({ page }) => {
 
   await signIn(page);
   const card = page.locator("form", { hasText: `Who is Kevin, and why does he know my coffee order? ${suffix}` });
-  await card.getByLabel("Spice").selectOption("5");
   await card.getByRole("button", { name: "Approve" }).click();
   await expect(page.getByText(`Who is Kevin, and why does he know my coffee order? ${suffix}`)).toHaveCount(0);
 });

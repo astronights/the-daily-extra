@@ -168,16 +168,12 @@ export function parsePackEdit(form: FormData): Parsed<PackEdit> {
   return { ok: true, value: { description, noun, meterLabel, author: optional(author) } };
 }
 
-/** Admin fixing a line: text 1–200 characters, level 1–5. */
-export function parseLineEdit(form: FormData): Parsed<{ body: string; level: number }> {
-  const errors: FieldErrors = {};
+/** Admin fixing a line: text 1–200 characters. */
+export function parseLineEdit(form: FormData): Parsed<{ body: string }> {
   const body = text(form, "body");
-  const level = intIn(text(form, "level"), 1, 5);
-  if (!body) errors.body = "The line can't be empty.";
-  else if (body.length > LIMITS.lineMax) errors.body = `Keep it under ${LIMITS.lineMax} characters.`;
-  if (level === null) errors.level = "Level goes from 1 to 5.";
-  if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, value: { body, level: level! } };
+  if (!body) return { ok: false, errors: { body: "The line can't be empty." } };
+  if (body.length > LIMITS.lineMax) return { ok: false, errors: { body: `Keep it under ${LIMITS.lineMax} characters.` } };
+  return { ok: true, value: { body } };
 }
 
 /** Splits "a *b* c" into plain and highlighted parts. */
