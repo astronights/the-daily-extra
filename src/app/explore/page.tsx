@@ -84,6 +84,7 @@ export default async function Explore({ searchParams }: Props) {
                   {p.description}
                 </p>
                 <span className="mono muted" style={{ fontSize: 11 }}>
+                  {p.kind === "cards" ? "Flashcards · " : ""}
                   {p.followers} following
                 </span>
               </article>

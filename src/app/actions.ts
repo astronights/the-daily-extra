@@ -51,9 +51,14 @@ export async function submitLine(_prev: FormState, form: FormData): Promise<Form
   const parsed = parseLine(form);
   if (!parsed.ok) return { status: "error", errors: parsed.errors };
 
+  const db = await getDb();
+  const pack = await repo.getLivePack(db, slug);
+  if (!pack) return { status: "error", message: "That pack doesn't exist." };
+  if (pack.kind === "cards" && !parsed.value.back) return { status: "error", errors: { back: "Add the back of the card." } };
   const ipHash = await currentIpHash();
   if (await tooMany("entries", ipHash)) return { status: "error", message: SLOW_DOWN };
-  const result = await repo.addLine(await getDb(), { slug, body: parsed.value.body, author: parsed.value.credit, ipHash });
+  const back = pack.kind === "cards" ? parsed.value.back : null;
+  const result = await repo.addLine(db, { slug, body: parsed.value.body, back, author: parsed.value.credit, ipHash });
   if (result === "missing") return { status: "error", message: "That pack doesn't exist." };
   if (result === "duplicate") return { status: "error", errors: { body: "Someone beat you to that one." } };
   return { status: "ok" };

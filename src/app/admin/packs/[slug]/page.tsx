@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { EditLineForm, EditPackForm } from "@/components/client";
+import { EditLineForm, EditPackForm, FormattingHelp } from "@/components/client";
 import { Page } from "@/components/ui";
 import { formatDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
@@ -49,7 +49,7 @@ export default async function EditPack({ params }: Props) {
           Edit pack
         </h1>
         <p className="mono muted" style={{ margin: 0 }}>
-          {approved} lines in rotation · the name /{pack.slug} can&apos;t change
+          {approved} {pack.kind === "cards" ? "cards" : "lines"} in rotation · the name /{pack.slug} can&apos;t change
         </p>
       </div>
 
@@ -60,10 +60,11 @@ export default async function EditPack({ params }: Props) {
           Lines
         </h2>
         <p className="hint" style={{ fontSize: 14, marginBottom: 8 }}>
-          Fix typos here. Each line&apos;s {pack.meterLabel} comes from readers&apos; ratings. Wrap words in *asterisks* to highlight them.
+          Fix typos here. Each line&apos;s {pack.meterLabel} comes from readers&apos; ratings.
         </p>
+        <FormattingHelp kind={pack.kind} />
         {lines.map((l) => (
-          <EditLineForm key={l.id} action={updateLineAction} line={{ id: l.id, body: l.body, note: note(l) }} />
+          <EditLineForm key={l.id} action={updateLineAction} line={{ id: l.id, body: l.body, back: l.back, note: note(l) }} cards={pack.kind === "cards"} />
         ))}
       </section>
     </Page>

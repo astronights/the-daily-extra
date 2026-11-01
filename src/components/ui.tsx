@@ -2,7 +2,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { toneStyle } from "@/lib/palette";
-import { bodyBlocks, highlightParts } from "@/lib/validation";
+import { isSimple, parseMarkdown, type Inline } from "@/lib/markdown";
 
 export const GITHUB_URL = "https://github.com/astronights";
 
@@ -93,53 +93,110 @@ export function Footer() {
   );
 }
 
-/** Renders text with its *highlighted* words. */
-export function Highlighted({ body }: { body: string }) {
+function InlineText({ parts }: { parts: Inline[] }) {
   return (
     <>
-      {highlightParts(body).map((p, i) => (p.mark ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}
+      {parts.map((p, i) => {
+        switch (p.t) {
+          case "bold":
+            return <strong key={i}>{p.v}</strong>;
+          case "italic":
+            return <em key={i}>{p.v}</em>;
+          case "mark":
+            return <mark key={i}>{p.v}</mark>;
+          case "strike":
+            return <s key={i}>{p.v}</s>;
+          case "code":
+            return <code key={i}>{p.v}</code>;
+          default:
+            return <span key={i}>{p.v}</span>;
+        }
+      })}
     </>
   );
 }
 
 /**
- * Renders an entry: its line breaks, "- " bullets and *highlights*.
- * One-line entries get quote marks; multi-line ones read better without.
+ * Renders an entry's Markdown (see lib/markdown.ts). A single line of
+ * text gets quote marks; anything with structure is shown as written.
  */
 export function EntryBody({ body, quoted = true }: { body: string; quoted?: boolean }) {
-  if (!body.includes("\n")) {
+  const blocks = parseMarkdown(body);
+  if (isSimple(body) && blocks[0].kind === "text") {
+    const parts = blocks[0].lines[0];
     return quoted ? (
       <>
-        “<Highlighted body={body} />”
+        “<InlineText parts={parts} />”
       </>
     ) : (
-      <Highlighted body={body} />
+      <InlineText parts={parts} />
     );
   }
   return (
     <span className="entry">
-      {bodyBlocks(body).map((b, i) =>
-        b.kind === "list" ? (
-          <ul key={i} className="entry-list">
-            {b.items.map((item, j) => (
-              <li key={j}>
-                <Highlighted body={item} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <span key={i} className="entry-line">
-            <Highlighted body={b.text} />
-          </span>
-        ),
-      )}
+      {blocks.map((b, i) => {
+        switch (b.kind) {
+          case "heading":
+            return (
+              <span key={i} className={`entry-h entry-h${b.level}`} role="heading" aria-level={b.level + 2}>
+                <InlineText parts={b.content} />
+              </span>
+            );
+          case "bullets":
+            return (
+              <ul key={i} className="entry-list">
+                {b.items.map((item, j) => (
+                  <li key={j}>
+                    <InlineText parts={item} />
+                  </li>
+                ))}
+              </ul>
+            );
+          case "numbers":
+            return (
+              <ol key={i} className="entry-list" start={b.start}>
+                {b.items.map((item, j) => (
+                  <li key={j}>
+                    <InlineText parts={item} />
+                  </li>
+                ))}
+              </ol>
+            );
+          case "quote":
+            return (
+              <span key={i} className="entry-quote">
+                {b.lines.map((l, j) => (
+                  <span key={j} className="entry-line">
+                    <InlineText parts={l} />
+                  </span>
+                ))}
+              </span>
+            );
+          case "code":
+            return (
+              <code key={i} className="entry-code">
+                {b.text}
+              </code>
+            );
+          default:
+            return (
+              <span key={i} className="entry-text">
+                {b.lines.map((l, j) => (
+                  <span key={j} className="entry-line">
+                    <InlineText parts={l} />
+                  </span>
+                ))}
+              </span>
+            );
+        }
+      })}
     </span>
   );
 }
 
 /** Extra class for today's card when the entry is long or multi-line, so it shrinks to fit. */
 export function quoteSize(body: string): string {
-  return body.includes("\n") || body.length > 140 ? "quote quote-long" : "quote";
+  return !isSimple(body) || body.length > 140 ? "quote quote-long" : "quote";
 }
 
 /** Where the meter starts for a line nobody has rated yet. */

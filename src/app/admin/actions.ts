@@ -39,9 +39,15 @@ export async function moderateLineAction(form: FormData): Promise<void> {
   await requireAdmin();
   const id = intIn(field(form, "id"), 1, 2 ** 31 - 1);
   const body = cleanEntry(field(form, "body"));
+  const back = cleanEntry(field(form, "back"));
   const db = await getDb();
   if (id) {
-    if (field(form, "decision") === "approve") await repo.approveLine(db, id, body && body.length <= maxLength(body) ? body : undefined);
+    if (field(form, "decision") === "approve") await repo.approveLine(
+        db,
+        id,
+        body && body.length <= maxLength(body) ? body : undefined,
+        back && back.length <= maxLength(back) ? back : undefined,
+      );
     else await repo.rejectLine(db, id);
   }
   revalidatePath("/admin");
@@ -94,5 +100,8 @@ export async function createPackAction(_prev: FormState, form: FormData): Promis
   const result = await repo.createPack(await getDb(), { ...rest, author: credit, day: utcDay(), tone: toneFrom(form) });
   if (result === "taken") return { status: "error", errors: { slug: `/${parsed.value.slug} already exists.` } };
   revalidatePath("/", "layout");
-  return { status: "ok", message: `/${parsed.value.slug} is live with ${parsed.value.lines.length} lines.` };
+  return {
+    status: "ok",
+    message: `/${parsed.value.slug} is live with ${parsed.value.entries.length} ${parsed.value.kind === "cards" ? "cards" : "lines"}.`,
+  };
 }

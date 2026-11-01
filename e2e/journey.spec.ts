@@ -161,7 +161,7 @@ test("pitch → pile → upvote → launch", async ({ page }) => {
 test("multi-line entries: blank-line format, bullets on the card, line breaks when copied", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const slug = `lists-${suffix}`;
-  const blocks = Array.from({ length: 30 }, (_, i) => `Rules ${i + 1} for tonight:\n- no phones\n- I pick the movie`).join("\n\n");
+  const blocks = Array.from({ length: 30 }, (_, i) => `# Rules ${i + 1}\n- no **phones**\n- I pick the _movie_`).join("\n\n");
 
   await signIn(page);
   await page.goto("/admin?tab=new");
@@ -179,10 +179,44 @@ test("multi-line entries: blank-line format, bullets on the card, line breaks wh
   await page.goto(`/${slug}`);
   const card = page.locator(".quote");
   await expect(card.locator(".entry-list li")).toHaveCount(2);
-  await expect(card.getByText("I pick the movie")).toBeVisible();
+  await expect(card.getByRole("heading", { name: /Rules \d+/ })).toBeVisible();
+  await expect(card.locator("strong")).toHaveText("phones");
+  await expect(card.locator("em")).toHaveText("movie");
   await page.getByRole("button", { name: "Copy & send" }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied).toMatch(/^Rules \d+ for tonight:\n- no phones\n- I pick the movie$/);
+  // Formatting marks are removed when copying; line breaks and bullets stay.
+  expect(copied).toMatch(/^Rules \d+\n- no phones\n- I pick the movie$/);
+});
+
+test("flashcard pack: front :: back, tap to reveal, copy includes the back once shown", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const slug = `words-${suffix}`;
+  await signIn(page);
+  await page.goto("/admin?tab=new");
+  await page.getByLabel("Pack name").fill(slug);
+  await page.getByRole("radio", { name: "Flashcards" }).check({ force: true });
+  await expect(page.getByText("Write each card as front :: back.").first()).toBeVisible();
+  await page.getByLabel("What does it give you, once a day?").fill("A dating word a day");
+  await page.getByLabel("“Today's …”").fill("word");
+  await page.getByLabel("Rated on…").fill("Accuracy");
+  const cards = Array.from({ length: 30 }, (_, i) => `Word ${i + 1} :: Meaning number ${i + 1}`);
+  await page.getByLabel(/Entries \(one per line\)/).fill([...cards, "Card with no back"].join("\n"));
+  await expect(page.getByText("1 card has no back yet.")).toBeVisible();
+  await page.getByLabel(/Entries \(one per line\)/).fill(cards.join("\n"));
+  await page.getByRole("button", { name: "Create pack" }).click();
+  await expect(page.getByText(`/${slug} is live with 30 cards.`)).toBeVisible();
+
+  await page.goto(`/${slug}`);
+  await expect(page.getByText("Today's word")).toBeVisible();
+  await expect(page.locator(".quote").first()).toContainText(/Word \d+/);
+  await expect(page.getByText(/Meaning number/)).toHaveCount(0);
+  await page.getByRole("button", { name: "Copy & send" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Word \d+$/);
+
+  await page.getByRole("button", { name: "Tap to reveal" }).click();
+  await expect(page.getByText(/Meaning number \d+/)).toBeVisible();
+  await page.getByRole("button", { name: /Copy & send|Copied!/ }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Word (\d+)\n\nMeaning number \1$/);
 });
 
 test("unknown pack shows the 404 page", async ({ page }) => {

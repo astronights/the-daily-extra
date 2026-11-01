@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { followAction, postReview, submitLine } from "@/app/actions";
-import { CopyShare, Countdown, LineForm, ReviewForm } from "@/components/client";
+import { CopyShare, Countdown, Flashcard, LineForm, ReviewForm } from "@/components/client";
 import { CheckIcon, EntryBody, Footer, Header, Meter, Page, PlusIcon, quoteSize } from "@/components/ui";
 import { formatDay, formatIssue, issueNumber, timeAgo, utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import * as repo from "@/lib/repo";
 import { readList } from "@/lib/session";
-import { plainText } from "@/lib/validation";
+import { toPlainText } from "@/lib/markdown";
 
 export const dynamic = "force-dynamic";
 
@@ -56,14 +56,40 @@ export default async function PackPage({ params }: Props) {
         {daily ? (
           <div className="card today">
             <span className="sticker">Today&apos;s {pack.noun}</span>
-            <div className={quoteSize(daily.body)}>
-              <EntryBody body={daily.body} />
-            </div>
-            <div className="row">
-              <Meter score={daily.avgScore} ratings={daily.ratings} label={pack.meterLabel} />
-              {daily.author ? <span className="mono muted">· {daily.author}</span> : null}
-            </div>
-            <CopyShare text={plainText(daily.body)} title={`Today's ${pack.noun} · Extra`} />
+            {pack.kind === "cards" && daily.back ? (
+              <Flashcard
+                front={
+                  <div className={quoteSize(daily.body)}>
+                    <EntryBody body={daily.body} quoted={false} />
+                  </div>
+                }
+                back={
+                  <div className="quote quote-long">
+                    <EntryBody body={daily.back} quoted={false} />
+                  </div>
+                }
+                meta={
+                  <div className="row">
+                    <Meter score={daily.avgScore} ratings={daily.ratings} label={pack.meterLabel} />
+                    {daily.author ? <span className="mono muted">· {daily.author}</span> : null}
+                  </div>
+                }
+                frontText={toPlainText(daily.body)}
+                backText={toPlainText(daily.back)}
+                title={`Today's ${pack.noun} · Extra`}
+              />
+            ) : (
+              <>
+                <div className={quoteSize(daily.body)}>
+                  <EntryBody body={daily.body} />
+                </div>
+                <div className="row">
+                  <Meter score={daily.avgScore} ratings={daily.ratings} label={pack.meterLabel} />
+                  {daily.author ? <span className="mono muted">· {daily.author}</span> : null}
+                </div>
+                <CopyShare text={toPlainText(daily.body)} title={`Today's ${pack.noun} · Extra`} />
+              </>
+            )}
           </div>
         ) : (
           <div className="card card-dashed today">
@@ -75,7 +101,7 @@ export default async function PackPage({ params }: Props) {
             </p>
             <p className="lede">The pile is empty. Be the reason tomorrow isn&apos;t.</p>
             <a href="#submit" className="btn btn-accent" style={{ alignSelf: "flex-start" }}>
-              Submit a line
+              Submit {pack.kind === "cards" ? "a card" : "a line"}
             </a>
           </div>
         )}
@@ -131,11 +157,12 @@ export default async function PackPage({ params }: Props) {
         <p className="mono muted" style={{ margin: 0, lineHeight: 1.6 }}>
           {pack.author ? `Pitched by ${pack.author} · ` : ""}Since {formatDay(pack.launchedOn).replace(/^\w+ · /, "")}
           <br />
+          {pack.kind === "cards" ? "Flashcards · " : ""}
           {pack.followers} following · Rated on {pack.meterLabel}
         </p>
       </section>
 
-      <LineForm action={submitLine} slug={pack.slug} />
+      <LineForm action={submitLine} slug={pack.slug} kind={pack.kind} />
 
       <Footer />
     </Page>

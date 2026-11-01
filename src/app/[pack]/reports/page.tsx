@@ -60,7 +60,17 @@ export default async function ReportsPage({ params, searchParams }: Props) {
         </p>
         {daily ? (
           <div className="card" style={{ margin: 0, padding: "14px 16px", boxShadow: "none", fontSize: 18, lineHeight: 1.3, fontWeight: 800 }}>
-            <EntryBody body={daily.body} />
+            <EntryBody body={daily.body} quoted={pack.kind !== "cards"} />
+            {daily.back ? (
+              <details style={{ marginTop: 10, fontWeight: 600 }}>
+                <summary className="mono" style={{ cursor: "pointer" }}>
+                  Show the back
+                </summary>
+                <div style={{ marginTop: 8 }}>
+                  <EntryBody body={daily.back} quoted={false} />
+                </div>
+              </details>
+            ) : null}
           </div>
         ) : null}
       </div>

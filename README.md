@@ -22,7 +22,8 @@ How it behaves:
 - Reviews post right away. Submitted lines and pitches wait for you in `/admin`.
 - Follows and upvotes need no account: they're kept in the visitor's cookies.
 - Spam protection: a hidden honeypot field and per-IP limits (5 reviews / 10 min, 5 lines / hour, 3 pitches / hour). IPs are stored only as salted hashes.
-- Wrap words in `*asterisks*` in a line to highlight them.
+- Entries support a small, safe Markdown subset: `**bold**`, `_italic_`, `*highlight*`, `~~strike~~`, `` `code` ``, `# headings`, `- bullets`, `1. numbers`, `> quotes`, and ``` code blocks. No links, images or HTML. Copying removes the formatting marks.
+- **Flashcard packs:** choose *Flashcards* as the pack type and write each card as `front :: back`. The page shows the front; people tap to reveal the back.
 - Entries can span several lines: in the paste box pick **Blank line between**, separate entries with an empty line, and start bullets with `- `. Multi-line entries can be up to 500 characters (single lines 200). Line breaks are kept when copied.
 
 ## Run it locally
@@ -53,8 +54,8 @@ Three tables (plus `schema_migrations`). Full definitions with comments are in `
 
 | Table | One row per | Key columns |
 |---|---|---|
-| `packs` | pack, from pitch to live | `slug`, `status` (pending → pile → live, or rejected), `description`, `noun`, `meter_label`, `accent`, `background`, `author`, `votes`, `followers`, `launched_on`, `created_at` |
-| `entries` | line | `pack_slug`, `body`, `author`, `status` (pending, approved, rejected), `shown_on` (the day it was the daily), `created_at` |
+| `packs` | pack, from pitch to live | `slug`, `status` (pending → pile → live, or rejected), `kind` (lines or cards), `description`, `noun`, `meter_label`, `accent`, `background`, `author`, `votes`, `followers`, `launched_on`, `created_at` |
+| `entries` | line or card | `pack_slug`, `body` (a card's front), `back` (cards only), `author`, `status` (pending, approved, rejected), `shown_on` (the day it was the daily), `created_at` |
 | `reviews` | score / review | `pack_slug`, `day`, `entry_id` (the line rated), `score` (1–5), `name`, `body` (empty = rating only), `created_at` |
 
 - Nothing is deleted: rejected packs and lines stay with status `rejected`. A rejected pack's name stays taken.

@@ -2,12 +2,14 @@
 // can run against a fresh in-memory database.
 import type { Db } from "./db.ts";
 import { nextTone, type Tone } from "./palette.ts";
+import type { Entry, PackKind } from "./validation.ts";
 
 export type PackStatus = "pending" | "pile" | "live" | "rejected";
 
 export type Pack = {
   slug: string;
   status: PackStatus;
+  kind: PackKind;
   description: string;
   noun: string;
   meterLabel: string;
@@ -26,7 +28,7 @@ export type LivePack = Pack & { status: "live"; accent: string; background: stri
 /** A line's readers' rating: average score across every day it's been shown. */
 export type LineRating = { avgScore: number | null; ratings: number };
 
-export type Daily = { entryId: number; body: string; author: string | null } & LineRating;
+export type Daily = { entryId: number; body: string; back: string | null; author: string | null } & LineRating;
 
 const LINE_RATING = `(SELECT round(avg(r.score), 1)::float8 FROM reviews r WHERE r.entry_id = e.id) AS "avgScore",
   (SELECT count(*)::int FROM reviews r WHERE r.entry_id = e.id) AS ratings`;
@@ -35,9 +37,9 @@ export type Report = { id: number; score: number; name: string | null; body: str
 
 export type RatingSummary = { count: number; average: number; counts: [number, number, number, number, number] };
 
-export type PendingLine = { id: number; packSlug: string; body: string; author: string | null; createdAt: number };
+export type PendingLine = { id: number; packSlug: string; body: string; back: string | null; author: string | null; createdAt: number };
 
-const PACK_COLUMNS = `slug, status, description, noun, meter_label AS "meterLabel", accent, background, author,
+const PACK_COLUMNS = `slug, status, kind, description, noun, meter_label AS "meterLabel", accent, background, author,
   votes, followers, launched_on::text AS "launchedOn", (extract(epoch FROM created_at) * 1000)::float8 AS "createdAt"`;
 
 function likePattern(q: string): string {
@@ -118,7 +120,7 @@ export async function changeVotes(db: Db, slug: string, delta: 1 | -1): Promise<
 
 async function readPick(db: Db, slug: string, day: string): Promise<Daily | null> {
   const rows = await db.query<Daily>(
-    `SELECT e.id AS "entryId", e.body, e.author, ${LINE_RATING} FROM entries e WHERE e.pack_slug = $1 AND e.shown_on = $2`,
+    `SELECT e.id AS "entryId", e.body, e.back, e.author, ${LINE_RATING} FROM entries e WHERE e.pack_slug = $1 AND e.shown_on = $2`,
     [slug, day],
   );
   return rows[0] ?? null;
@@ -218,18 +220,18 @@ export async function addReview(
 
 // ---------- lines ----------
 
-async function insertLines(
+async function insertEntries(
   db: Db,
   slug: string,
-  lines: string[],
+  entries: Entry[],
   opts: { author: string | null; status: "pending" | "approved"; ipHash: string | null },
 ): Promise<void> {
-  for (let i = 0; i < lines.length; i += 200) {
-    const chunk = lines.slice(i, i + 200);
-    const values = chunk.map((_, j) => `($1, $2, $3, $4, $${j + 5})`).join(", ");
+  for (let i = 0; i < entries.length; i += 200) {
+    const chunk = entries.slice(i, i + 200);
+    const values = chunk.map((_, j) => `($1, $2, $3, $4, $${j * 2 + 5}, $${j * 2 + 6})`).join(", ");
     await db.query(
-      `INSERT INTO entries (pack_slug, author, status, ip_hash, body) VALUES ${values} ON CONFLICT DO NOTHING`,
-      [slug, opts.author, opts.status, opts.ipHash, ...chunk],
+      `INSERT INTO entries (pack_slug, author, status, ip_hash, body, back) VALUES ${values} ON CONFLICT DO NOTHING`,
+      [slug, opts.author, opts.status, opts.ipHash, ...chunk.flatMap((e) => [e.body, e.back])],
     );
   }
 }
@@ -237,12 +239,12 @@ async function insertLines(
 /** A reader's line for a live pack. Waits for admin approval. */
 export async function addLine(
   db: Db,
-  l: { slug: string; body: string; author: string | null; ipHash: string },
+  l: { slug: string; body: string; back?: string | null; author: string | null; ipHash: string },
 ): Promise<"ok" | "duplicate" | "missing"> {
   if (!(await getLivePack(db, l.slug))) return "missing";
   const rows = await db.query(
-    `INSERT INTO entries (pack_slug, body, author, ip_hash) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id`,
-    [l.slug, l.body, l.author, l.ipHash],
+    `INSERT INTO entries (pack_slug, body, back, author, ip_hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING RETURNING id`,
+    [l.slug, l.body, l.back ?? null, l.author, l.ipHash],
   );
   return rows.length ? "ok" : "duplicate";
 }
@@ -250,25 +252,24 @@ export async function addLine(
 /** Lines waiting for approval on live packs (pitch lines are reviewed with their pitch). */
 export async function listPendingLines(db: Db): Promise<PendingLine[]> {
   return db.query<PendingLine>(
-    `SELECT e.id, e.pack_slug AS "packSlug", e.body, e.author, (extract(epoch FROM e.created_at) * 1000)::float8 AS "createdAt"
+    `SELECT e.id, e.pack_slug AS "packSlug", e.body, e.back, e.author, (extract(epoch FROM e.created_at) * 1000)::float8 AS "createdAt"
      FROM entries e JOIN packs p ON p.slug = e.pack_slug AND p.status = 'live'
      WHERE e.status = 'pending' ORDER BY e.created_at ASC LIMIT 100`,
   );
 }
 
-/** All lines of a pack, for reviewing a pitch. */
-export async function packLines(db: Db, slug: string): Promise<string[]> {
-  const rows = await db.query<{ body: string }>(`SELECT body FROM entries WHERE pack_slug = $1 ORDER BY id`, [slug]);
-  return rows.map((r) => r.body);
+/** All entries of a pack, for reviewing a pitch. */
+export async function packLines(db: Db, slug: string): Promise<Entry[]> {
+  return db.query<Entry>(`SELECT body, back FROM entries WHERE pack_slug = $1 ORDER BY id`, [slug]);
 }
 
-/** Approves a pending line, optionally with fixed-up text. */
-export async function approveLine(db: Db, id: number, body?: string): Promise<"ok" | "duplicate"> {
+/** Approves a pending line, optionally with fixed-up text (and back, for cards). */
+export async function approveLine(db: Db, id: number, body?: string, back?: string): Promise<"ok" | "duplicate"> {
   try {
-    await db.query(`UPDATE entries SET status = 'approved', body = COALESCE($2, body) WHERE id = $1 AND status = 'pending'`, [
-      id,
-      body ?? null,
-    ]);
+    await db.query(
+      `UPDATE entries SET status = 'approved', body = COALESCE($2, body), back = COALESCE($3, back) WHERE id = $1 AND status = 'pending'`,
+      [id, body ?? null, back ?? null],
+    );
     return "ok";
   } catch (e) {
     if (isUniqueViolation(e)) return "duplicate";
@@ -280,20 +281,20 @@ function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && "code" in e && (e as { code: unknown }).code === "23505";
 }
 
-export type EditableLine = { id: number; body: string; status: "pending" | "approved" | "rejected"; shownOn: string | null } & LineRating;
+export type EditableLine = { id: number; body: string; back: string | null; status: "pending" | "approved" | "rejected"; shownOn: string | null } & LineRating;
 
 /** Every line of a pack, for the admin editor. Newest last. */
 export async function listPackLines(db: Db, slug: string): Promise<EditableLine[]> {
   return db.query<EditableLine>(
-    `SELECT e.id, e.body, e.status, e.shown_on::text AS "shownOn", ${LINE_RATING} FROM entries e WHERE e.pack_slug = $1 ORDER BY e.id`,
+    `SELECT e.id, e.body, e.back, e.status, e.shown_on::text AS "shownOn", ${LINE_RATING} FROM entries e WHERE e.pack_slug = $1 ORDER BY e.id`,
     [slug],
   );
 }
 
-/** Fixes a line's text. */
-export async function updateLine(db: Db, id: number, edit: { body: string }): Promise<"ok" | "duplicate" | "missing"> {
+/** Fixes a line's text (and a card's back). */
+export async function updateLine(db: Db, id: number, edit: { body: string; back?: string | null }): Promise<"ok" | "duplicate" | "missing"> {
   try {
-    const rows = await db.query(`UPDATE entries SET body = $2 WHERE id = $1 RETURNING 1`, [id, edit.body]);
+    const rows = await db.query(`UPDATE entries SET body = $2, back = $3 WHERE id = $1 RETURNING 1`, [id, edit.body, edit.back ?? null]);
     return rows.length ? "ok" : "missing";
   } catch (e) {
     if (isUniqueViolation(e)) return "duplicate";
@@ -323,11 +324,12 @@ export async function rejectLine(db: Db, id: number): Promise<void> {
 
 export type NewPack = {
   slug: string;
+  kind?: PackKind;
   description: string;
   noun: string;
   meterLabel: string;
   author: string | null;
-  lines: string[];
+  entries: Entry[];
 };
 
 /** A reader's pitch: a pending pack plus its lines, waiting for admin. */
@@ -336,16 +338,16 @@ export async function addPitch(
   p: NewPack & { ipHash: string },
 ): Promise<"ok" | "duplicate" | "taken" | "unavailable"> {
   const inserted = await db.query(
-    `INSERT INTO packs (slug, description, noun, meter_label, author, ip_hash)
-     VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING 1`,
-    [p.slug, p.description, p.noun, p.meterLabel, p.author, p.ipHash],
+    `INSERT INTO packs (slug, kind, description, noun, meter_label, author, ip_hash)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING RETURNING 1`,
+    [p.slug, p.kind ?? "lines", p.description, p.noun, p.meterLabel, p.author, p.ipHash],
   );
   if (!inserted.length) {
     const status = (await getPack(db, p.slug))?.status;
     return status === "live" ? "taken" : status === "rejected" ? "unavailable" : "duplicate";
   }
   // Lines carry no IP so a pitch doesn't count against the per-line spam limit.
-  await insertLines(db, p.slug, p.lines, { author: p.author, status: "pending", ipHash: null });
+  await insertEntries(db, p.slug, p.entries, { author: p.author, status: "pending", ipHash: null });
   return "ok";
 }
 
@@ -380,12 +382,12 @@ export async function launchPack(db: Db, slug: string, opts: { day: string; tone
 export async function createPack(db: Db, p: NewPack & { day: string; tone?: Tone }): Promise<"ok" | "taken"> {
   const t = p.tone ?? nextTone(await countLivePacks(db));
   const inserted = await db.query(
-    `INSERT INTO packs (slug, status, description, noun, meter_label, author, accent, background, launched_on)
-     VALUES ($1, 'live', $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING RETURNING 1`,
-    [p.slug, p.description, p.noun, p.meterLabel, p.author, t.accent, t.background, p.day],
+    `INSERT INTO packs (slug, status, kind, description, noun, meter_label, author, accent, background, launched_on)
+     VALUES ($1, 'live', $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING RETURNING 1`,
+    [p.slug, p.kind ?? "lines", p.description, p.noun, p.meterLabel, p.author, t.accent, t.background, p.day],
   );
   if (!inserted.length) return "taken";
-  await insertLines(db, p.slug, p.lines, { author: p.author, status: "approved", ipHash: null });
+  await insertEntries(db, p.slug, p.entries, { author: p.author, status: "approved", ipHash: null });
   return "ok";
 }
 

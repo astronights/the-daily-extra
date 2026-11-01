@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { formatCountdown, msUntilNextDay } from "@/lib/dates";
 import { IDLE, type FormState } from "@/lib/form-state";
-import { LIMITS, splitEntries, type EntryFormat } from "@/lib/validation";
+import { CARD_SEPARATOR, LIMITS, splitEntries, toEntries, type EntryFormat, type PackKind } from "@/lib/validation";
 
 type Action = (prev: FormState, form: FormData) => Promise<FormState>;
 
@@ -79,6 +79,82 @@ export function CopyShare({ text, title }: { text: string; title: string }) {
         {copied === "line" ? "Now go send it. Then come back and report." : ""}
       </p>
     </div>
+  );
+}
+
+/** Today's flashcard: the front, then tap to reveal the back. Copy follows what's showing. */
+export function Flashcard({
+  front,
+  back,
+  meta,
+  frontText,
+  backText,
+  title,
+}: {
+  front: ReactNode;
+  back: ReactNode;
+  meta: ReactNode;
+  frontText: string;
+  backText: string;
+  title: string;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <>
+      {front}
+      {shown ? (
+        <div className="card-back" aria-live="polite">
+          <span className="mono muted">The back</span>
+          {back}
+        </div>
+      ) : (
+        <button type="button" className="reveal" onClick={() => setShown(true)}>
+          Tap to reveal
+        </button>
+      )}
+      {meta}
+      <CopyShare text={shown ? `${frontText}\n\n${backText}` : frontText} title={title} />
+    </>
+  );
+}
+
+/** The formatting people can use in entries, with a flashcard note for card packs. */
+export function FormattingHelp({ kind = "lines" }: { kind?: PackKind }) {
+  const rows: Array<[string, string]> = [
+    ["**bold**", "bold"],
+    ["_italic_", "italic"],
+    ["*highlight*", "yellow highlight"],
+    ["~~strike~~", "crossed out"],
+    ["`code`", "typewriter text"],
+    ["# Heading", "a heading (## and ### smaller)"],
+    ["- item", "bullet list"],
+    ["1. item", "numbered list"],
+    ["> text", "quote"],
+  ];
+  return (
+    <details className="help">
+      <summary className="mono">Formatting help</summary>
+      {kind === "cards" ? (
+        <p className="hint" style={{ fontSize: 14 }}>
+          <strong>Flashcards:</strong> write each card as <code>front {CARD_SEPARATOR} back</code>, for example{" "}
+          <code>Situationship {CARD_SEPARATOR} A relationship with none of the paperwork</code>. The back is hidden until someone taps
+          to reveal it.
+        </p>
+      ) : null}
+      <table className="help-table">
+        <tbody>
+          {rows.map(([md, what]) => (
+            <tr key={md}>
+              <td>
+                <code>{md}</code>
+              </td>
+              <td>{what}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="hint">Need line breaks or lists? Choose &ldquo;Blank line between&rdquo; so each entry can span several lines. Links and images aren&apos;t supported.</p>
+    </details>
   );
 }
 
@@ -173,7 +249,8 @@ export function ReviewForm({ action, slug, day }: { action: Action; slug: string
   );
 }
 
-export function LineForm({ action, slug }: { action: Action; slug: string }) {
+export function LineForm({ action, slug, kind = "lines" }: { action: Action; slug: string; kind?: PackKind }) {
+  const cards = kind === "cards";
   const [state, formAction, pending] = useActionState(action, IDLE);
   // Remembers which success the person dismissed with "Submit another".
   const [dismissed, setDismissed] = useState<FormState | null>(null);
@@ -185,7 +262,7 @@ export function LineForm({ action, slug }: { action: Action; slug: string }) {
           <br />
           the pile.
         </h2>
-        <p className="lede">We read every line before it goes live. If it makes the cut, it could be someone&apos;s daily soon.</p>
+        <p className="lede">We read every {cards ? "card" : "line"} before it goes live. If it makes the cut, it could be someone&apos;s daily soon.</p>
         <button type="button" className="btn btn-plain" style={{ alignSelf: "flex-start" }} onClick={() => setDismissed(state)}>
           Submit another
         </button>
@@ -196,14 +273,26 @@ export function LineForm({ action, slug }: { action: Action; slug: string }) {
   return (
     <form onSubmit={keepValues(formAction)} className="yellow" id="submit">
       <h2 className="display">Got a better one?</h2>
-      <p className="lede">Submit a line for /{slug}. Good ones become someone&apos;s daily.</p>
+      <p className="lede">
+        Submit {cards ? "a card" : "a line"} for /{slug}. Good ones become someone&apos;s daily.
+      </p>
       <input type="hidden" name="pack" value={slug} />
       <Honeypot />
       <label className="field">
-        Your line
+        {cards ? "Front of the card" : "Your line"}
         <textarea name="body" rows={3} required minLength={LIMITS.lineMin} maxLength={LIMITS.multiLineMax} className="textarea" aria-invalid={Boolean(e.body)} aria-describedby={e.body ? "err-line" : undefined} />
       </label>
       <FieldError id="err-line" message={e.body} />
+      {cards ? (
+        <>
+          <label className="field">
+            Back of the card
+            <textarea name="back" rows={3} required maxLength={LIMITS.multiLineMax} className="textarea" aria-invalid={Boolean(e.back)} />
+          </label>
+          <FieldError id="err-back" message={e.back} />
+        </>
+      ) : null}
+      <FormattingHelp />
       <label className="field">
         Credit me as (optional)
         <input name="credit" maxLength={LIMITS.name} className="input" placeholder="@yourhandle" />
@@ -220,11 +309,12 @@ export function LineForm({ action, slug }: { action: Action; slug: string }) {
  * Entries are one per line, or separated by blank lines so each can
  * span several lines (lists, bullets).
  */
-export function LinesField({ error }: { error?: string }) {
+export function LinesField({ error, kind = "lines" }: { error?: string; kind?: PackKind }) {
   const [value, setValue] = useState("");
   const [format, setFormat] = useState<EntryFormat>("lines");
-  const entries = splitEntries(value, format);
+  const entries = toEntries(value, format, kind);
   const count = entries.length;
+  const missingBacks = kind === "cards" ? entries.filter((e) => !e.back).length : 0;
   const min = LIMITS.pitchLinesMin;
   const pct = Math.min(100, Math.round((count / min) * 100));
   // Pasted text with blank-line gaps and multi-line entries probably wants the other format.
@@ -276,9 +366,13 @@ export function LinesField({ error }: { error?: string }) {
           aria-invalid={Boolean(error)}
           aria-describedby="lines-count"
           placeholder={
-            format === "lines"
-              ? "Paste your entries here, one per line.\nOr upload a .txt file below."
-              : "Rules for tonight:\n- no phones\n- I pick the movie\n\nWhy were you up at 3am?"
+            kind === "cards"
+              ? format === "lines"
+                ? `Situationship ${CARD_SEPARATOR} A relationship with none of the paperwork\nGhosting ${CARD_SEPARATOR} Leaving without a goodbye`
+                : `Red flags\n${CARD_SEPARATOR}\n- texts back in 3 days\n- \"I'm not like other guys\"\n\nGhosting ${CARD_SEPARATOR} Leaving without a goodbye`
+              : format === "lines"
+                ? "Paste your entries here, one per line.\nOr upload a .txt file below."
+                : "Rules for tonight:\n- no phones\n- I pick the movie\n\nWhy were you up at 3am?"
           }
         />
       </label>
@@ -308,6 +402,11 @@ export function LinesField({ error }: { error?: string }) {
       <p className="hint" style={{ fontWeight: 600 }}>
         {count >= min ? "That's enough to pitch." : `${min - count} more to go.`} Blank entries and duplicates don&apos;t count.
       </p>
+      {missingBacks ? (
+        <p className="hint" role="status" style={{ fontWeight: 600, color: "var(--accent-text)" }}>
+          {missingBacks} {missingBacks === 1 ? "card has" : "cards have"} no back yet. Write each as front {CARD_SEPARATOR} back.
+        </p>
+      ) : null}
       <FieldError id="err-lines" message={error} />
     </>
   );
@@ -326,6 +425,7 @@ export function PackForm({
   extra?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE);
+  const [kind, setKind] = useState<PackKind>("lines");
   if (state.status === "ok" && mode === "pitch") {
     return (
       <section className="card" role="status">
@@ -350,6 +450,34 @@ export function PackForm({
           </span>
         </label>
         <FieldError id="err-slug" message={e.slug} />
+        <fieldset className="row" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="mono" style={{ marginBottom: 8 }}>
+            Pack type
+          </legend>
+          {(
+            [
+              ["lines", "Lines", "One line a day"],
+              ["cards", "Flashcards", "Front, tap to reveal the back"],
+            ] as const
+          ).map(([key, label, hint]) => (
+            <label key={key} className="chip" aria-pressed={kind === key} style={{ position: "relative" }} title={hint}>
+              <input
+                type="radio"
+                name="kind"
+                value={key}
+                checked={kind === key}
+                onChange={() => setKind(key)}
+                style={{ position: "absolute", opacity: 0, width: 1, height: 1 }}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        {kind === "cards" ? (
+          <p className="hint" style={{ fontSize: 14 }}>
+            Each day shows a card&apos;s front; people tap to reveal the back. Write each card as <code>front {CARD_SEPARATOR} back</code>.
+          </p>
+        ) : null}
         <label className="field">
           What does it give you, once a day?
           <input name="description" className="input" required maxLength={LIMITS.descriptionMax} placeholder="A believable excuse to get out of plans" aria-invalid={Boolean(e.description)} />
@@ -370,13 +498,19 @@ export function PackForm({
       </fieldset>
 
       <fieldset className="fieldset">
-        <legend>2 · The lines</legend>
+        <legend>2 · The {kind === "cards" ? "cards" : "lines"}</legend>
         <p className="hint" style={{ fontSize: 14 }}>
-          At least {LIMITS.pitchLinesMin} entries. That&apos;s a month of dailies. Paste them in or upload a .txt file.
-          Need lists or line breaks? Pick &ldquo;Blank line between&rdquo; and start bullets with &ldquo;- &rdquo;. Wrap words in *asterisks* to
-          highlight them.
+          At least {LIMITS.pitchLinesMin} {kind === "cards" ? "cards" : "entries"}. That&apos;s a month of dailies. Paste them in or upload a
+          .txt file.
+          {kind === "cards" ? (
+            <>
+              {" "}
+              One card per entry: <code>front {CARD_SEPARATOR} back</code>.
+            </>
+          ) : null}
         </p>
-        <LinesField error={e.lines} />
+        <FormattingHelp kind={kind} />
+        <LinesField error={e.lines} kind={kind} />
       </fieldset>
 
       <fieldset className="fieldset">
@@ -418,7 +552,15 @@ export function LoginForm({ action }: { action: Action }) {
 }
 
 /** Admin: fix one line's text. */
-export function EditLineForm({ action, line }: { action: Action; line: { id: number; body: string; note: string } }) {
+export function EditLineForm({
+  action,
+  line,
+  cards = false,
+}: {
+  action: Action;
+  line: { id: number; body: string; back: string | null; note: string };
+  cards?: boolean;
+}) {
   const [state, formAction, pending] = useActionState(action, IDLE);
   const e = state.status === "error" ? state.errors ?? {} : {};
   return (
@@ -432,6 +574,15 @@ export function EditLineForm({ action, line }: { action: Action; line: { id: num
         <textarea name="body" rows={line.body.includes("\n") ? 4 : 2} defaultValue={line.body} maxLength={LIMITS.multiLineMax} required className="textarea" aria-invalid={Boolean(e.body)} />
       </label>
       <FieldError id={`err-line-${line.id}`} message={e.body ?? (state.status === "error" ? state.message : undefined)} />
+      {cards ? (
+        <>
+          <label className="field">
+            Back
+            <textarea name="back" rows={line.back?.includes("\n") ? 4 : 2} defaultValue={line.back ?? ""} maxLength={LIMITS.multiLineMax} className="textarea" aria-invalid={Boolean(e.back)} />
+          </label>
+          <FieldError id={`err-back-${line.id}`} message={e.back} />
+        </>
+      ) : null}
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <span className="row" style={{ gap: 10 }}>
           {state.status === "ok" ? (

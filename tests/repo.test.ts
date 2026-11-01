@@ -5,7 +5,8 @@ import { PALETTE } from "../src/lib/palette.ts";
 import * as repo from "../src/lib/repo.ts";
 
 const DAY = "2026-11-01";
-const lines = (n: number, prefix = "line") => Array.from({ length: n }, (_, i) => `${prefix} number ${i + 1} is here`);
+const lines = (n: number, prefix = "line") =>
+  Array.from({ length: n }, (_, i) => ({ body: `${prefix} number ${i + 1} is here`, back: null as string | null }));
 const DRAMA_LINES = 30;
 const pitch = { slug: "excuses", description: "An excuse a day", noun: "excuse", meterLabel: "Believability", author: "@bail", ipHash: "x" };
 
@@ -20,7 +21,7 @@ beforeEach(async () => {
     noun: "drama",
     meterLabel: "Spice",
     author: null,
-    lines: lines(DRAMA_LINES, "drama"),
+    entries: lines(DRAMA_LINES, "drama"),
     day: DAY,
   });
 });
@@ -35,9 +36,9 @@ async function tableNames(d: Db): Promise<string[]> {
 }
 
 describe("migrations", () => {
-  it("create the three tables, no data, and skip files that already ran", async () => {
+  it("create the tables, no data, and skip files that already ran", async () => {
     const fresh = await createPgliteDb();
-    expect(await runMigrations(fresh)).toEqual(["0001_init.sql", "0002_ratings_set_level.sql"]);
+    expect(await runMigrations(fresh)).toEqual(["0001_init.sql", "0002_ratings_set_level.sql", "0003_flashcards.sql"]);
     expect(await runMigrations(fresh)).toEqual([]);
     expect(await tableNames(fresh)).toEqual(["entries", "packs", "reviews", "schema_migrations"]);
     expect(await repo.listLivePacks(fresh)).toEqual([]);
@@ -69,12 +70,12 @@ describe("createPack", () => {
     const pack = await repo.getLivePack(db, "drama");
     expect(pack).toMatchObject({ status: "live", noun: "drama", meterLabel: "Spice", accent: PALETTE[0].accent, background: PALETTE[0].background, launchedOn: DAY });
     expect(await repo.unusedLineCount(db, "drama")).toBe(DRAMA_LINES);
-    const again = await repo.createPack(db, { ...pitch, slug: "drama", lines: [], day: DAY });
+    const again = await repo.createPack(db, { ...pitch, slug: "drama", entries: [], day: DAY });
     expect(again).toBe("taken");
   });
 
   it("gives the next pack the next colour", async () => {
-    await repo.createPack(db, { ...pitch, lines: lines(100), day: DAY });
+    await repo.createPack(db, { ...pitch, entries: lines(100), day: DAY });
     expect((await repo.getPack(db, "excuses"))?.accent).toBe(PALETTE[1].accent);
   });
 });
@@ -158,7 +159,7 @@ describe("submitted lines", () => {
     const [pending] = await repo.listPendingLines(db);
     await repo.rejectLine(db, pending.id);
     expect(await repo.listPendingLines(db)).toHaveLength(0);
-    expect(await repo.packLines(db, "drama")).toContain("Bad line here");
+    expect((await repo.packLines(db, "drama")).map((e) => e.body)).toContain("Bad line here");
     expect(await repo.addLine(db, { slug: "drama", body: "Bad line here", author: null, ipHash: "x" })).toBe("duplicate");
   });
 });
@@ -176,16 +177,16 @@ describe("followers and votes (counts only)", () => {
   });
 
   it("finds followed packs in cookie order", async () => {
-    await repo.createPack(db, { ...pitch, lines: lines(100), day: DAY });
+    await repo.createPack(db, { ...pitch, entries: lines(100), day: DAY });
     expect((await repo.livePacksBySlugs(db, ["excuses", "gone", "drama"])).map((p) => p.slug)).toEqual(["excuses", "drama"]);
   });
 });
 
 describe("pitches, the pile and launching", () => {
   it("move a pitch from pending to the pile to live", async () => {
-    expect(await repo.addPitch(db, { ...pitch, lines: lines(120) })).toBe("ok");
-    expect(await repo.addPitch(db, { ...pitch, lines: lines(120) })).toBe("duplicate");
-    expect(await repo.addPitch(db, { ...pitch, slug: "drama", lines: lines(120) })).toBe("taken");
+    expect(await repo.addPitch(db, { ...pitch, entries: lines(120) })).toBe("ok");
+    expect(await repo.addPitch(db, { ...pitch, entries: lines(120) })).toBe("duplicate");
+    expect(await repo.addPitch(db, { ...pitch, slug: "drama", entries: lines(120) })).toBe("taken");
 
     // Pitch lines wait with the pitch, not in the line queue, and don't count toward spam limits.
     expect(await repo.listPendingLines(db)).toHaveLength(0);
@@ -212,12 +213,12 @@ describe("pitches, the pile and launching", () => {
   });
 
   it("keep rejected pitches, and their names stay taken", async () => {
-    await repo.addPitch(db, { ...pitch, lines: lines(100) });
+    await repo.addPitch(db, { ...pitch, entries: lines(100) });
     await repo.rejectPitch(db, "excuses");
     expect(await repo.getPack(db, "excuses")).toMatchObject({ status: "rejected" });
     expect(await repo.packLines(db, "excuses")).toHaveLength(100);
     expect(await repo.listPacksByStatus(db, "pending")).toHaveLength(0);
-    expect(await repo.addPitch(db, { ...pitch, lines: lines(100) })).toBe("unavailable");
+    expect(await repo.addPitch(db, { ...pitch, entries: lines(100) })).toBe("unavailable");
     expect(await repo.launchPack(db, "excuses", { day: DAY })).toBe(false);
   });
 });
@@ -242,5 +243,29 @@ describe("admin edits", () => {
     const [pending] = await repo.listPendingLines(db);
     expect(await repo.approveLine(db, pending.id, "Who is Kevin?")).toBe("ok");
     expect((await repo.listPackLines(db, "drama")).at(-1)).toMatchObject({ body: "Who is Kevin?", status: "approved" });
+  });
+});
+
+describe("flashcard packs", () => {
+  it("store a front and back, serve both, and keep backs through edits", async () => {
+    const cards = Array.from({ length: 30 }, (_, i) => ({ body: `Word ${i}`, back: `Meaning ${i}` }));
+    expect(await repo.createPack(db, { ...pitch, slug: "words", kind: "cards", entries: cards, day: DAY })).toBe("ok");
+    expect(await repo.getLivePack(db, "words")).toMatchObject({ kind: "cards" });
+    const today = (await repo.getDaily(db, "words", DAY))!;
+    expect(today.back).toBe(today.body.replace("Word", "Meaning"));
+
+    expect(await repo.updateLine(db, today.entryId, { body: today.body, back: "Fixed meaning" })).toBe("ok");
+    expect((await repo.getDaily(db, "words", DAY))?.back).toBe("Fixed meaning");
+
+    await repo.addLine(db, { slug: "words", body: "Ghosting", back: "Leaving without a word", author: null, ipHash: "x" });
+    const [pending] = await repo.listPendingLines(db);
+    expect(pending).toMatchObject({ body: "Ghosting", back: "Leaving without a word" });
+    await repo.approveLine(db, pending.id, undefined, "Leaving without a goodbye");
+    expect((await repo.packLines(db, "words")).at(-1)).toEqual({ body: "Ghosting", back: "Leaving without a goodbye" });
+  });
+
+  it("line packs default to kind 'lines' with no backs", async () => {
+    expect(await repo.getPack(db, "drama")).toMatchObject({ kind: "lines" });
+    expect((await repo.getDaily(db, "drama", DAY))?.back).toBeNull();
   });
 });

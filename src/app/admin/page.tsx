@@ -6,6 +6,7 @@ import { timeAgo } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import { PALETTE, nextTone } from "@/lib/palette";
 import * as repo from "@/lib/repo";
+import type { Entry } from "@/lib/validation";
 import { adminConfigured, isAdmin } from "@/lib/session";
 import { createPackAction, launchAction, login, logout, moderateLineAction, pitchDecisionAction } from "./actions";
 
@@ -62,16 +63,23 @@ function Empty() {
   );
 }
 
-function Lines({ lines }: { lines: string[] }) {
+function Lines({ lines }: { lines: Entry[] }) {
+  const cards = lines.some((l) => l.back);
   return (
     <details>
       <summary className="mono" style={{ cursor: "pointer", minHeight: 32 }}>
-        {lines.length} lines · show all
+        {lines.length} {cards ? "cards" : "lines"} · show all
       </summary>
       <ol style={{ margin: "8px 0 0", padding: "12px 12px 12px 34px", background: "var(--paper)", border: "2px solid var(--ink)", maxHeight: 320, overflow: "auto", fontSize: 15, lineHeight: 1.5 }}>
         {lines.map((l, i) => (
           <li key={i} style={{ whiteSpace: "pre-line" }}>
-            {l}
+            {l.body}
+            {l.back ? (
+              <>
+                <br />
+                <span className="muted">↳ {l.back}</span>
+              </>
+            ) : null}
           </li>
         ))}
       </ol>
@@ -162,6 +170,12 @@ export default async function AdminPage({ searchParams }: Props) {
                   The line (fix typos before approving)
                   <textarea name="body" rows={3} defaultValue={l.body} maxLength={500} className="textarea" style={{ fontSize: 18, fontWeight: 700 }} />
                 </label>
+                {l.back !== null ? (
+                  <label className="field">
+                    Back of the card
+                    <textarea name="back" rows={3} defaultValue={l.back} maxLength={500} className="textarea" />
+                  </label>
+                ) : null}
                 <div className="grid-2">
                   <button type="submit" name="decision" value="approve" className="btn btn-accent">
                     Approve

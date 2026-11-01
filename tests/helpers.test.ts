@@ -5,18 +5,16 @@ import { PALETTE, nextTone, tone, toneStyle } from "../src/lib/palette.ts";
 import { parseList, toggleInList } from "../src/lib/cookie-list.ts";
 import { splitStatements } from "../src/lib/db.ts";
 import {
-  highlightParts,
   isBot,
   normalizeSlug,
-  bodyBlocks,
   cleanEntry,
   maxLength,
   parseLine,
   parseLineEdit,
+  splitCard,
   parsePackEdit,
   parsePitch,
   parseReview,
-  plainText,
   splitEntries,
   splitLines,
 } from "../src/lib/validation.ts";
@@ -89,7 +87,7 @@ describe("validation", () => {
     expect(parseLine(form({ body: "u up?" }))).toMatchObject({ ok: false, errors: { body: "Give us a bit more than that." } });
     expect(parseLine(form({ body: "Why is your phone face down?", credit: "@me" }))).toEqual({
       ok: true,
-      value: { body: "Why is your phone face down?", credit: "@me" },
+      value: { body: "Why is your phone face down?", back: null, credit: "@me" },
     });
   });
 
@@ -104,7 +102,7 @@ describe("validation", () => {
 
   it("needs 30+ lines and a valid name to pitch", () => {
     const base = { slug: "excuses", description: "An excuse a day", noun: "Excuse", meterLabel: "Believability" };
-    expect(parsePitch(form({ ...base, lines: many(100) }))).toMatchObject({ ok: true, value: { slug: "excuses", noun: "excuse" } });
+    expect(parsePitch(form({ ...base, lines: many(100) }))).toMatchObject({ ok: true, value: { slug: "excuses", noun: "excuse", kind: "lines" } });
     expect(parsePitch(form({ ...base, lines: many(29) }))).toMatchObject({ ok: false, errors: { lines: expect.stringContaining("You have 29") } });
     expect(parsePitch(form({ ...base, lines: many(1001) }))).toMatchObject({ ok: false, errors: { lines: expect.any(String) } });
     expect(parsePitch(form({ ...base, slug: "admin", lines: many(100) }))).toMatchObject({ ok: false, errors: { slug: expect.any(String) } });
@@ -118,14 +116,6 @@ describe("validation", () => {
     expect(isBot(form({}))).toBe(false);
   });
 
-  it("handles *highlights*", () => {
-    expect(highlightParts("who is *Sam Gym* then")).toEqual([
-      { text: "who is ", mark: false },
-      { text: "Sam Gym", mark: true },
-      { text: " then", mark: false },
-    ]);
-    expect(plainText("who is *Sam Gym* then")).toBe("who is Sam Gym then");
-  });
 });
 
 describe("crypto", () => {
@@ -162,7 +152,7 @@ describe("admin edit validation", () => {
     expect(parsePackEdit(form({ description: "x", noun: "", meterLabel: "Toxicity" }))).toMatchObject({ ok: false });
   });
   it("checks line edits", () => {
-    expect(parseLineEdit(form({ body: "  fixed   line " }))).toEqual({ ok: true, value: { body: "fixed line" } });
+    expect(parseLineEdit(form({ body: "  fixed   line " }))).toEqual({ ok: true, value: { body: "fixed line", back: null } });
     expect(parseLineEdit(form({ body: "" }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
     expect(parseLineEdit(form({ body: "x".repeat(201) }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
   });
@@ -187,18 +177,38 @@ describe("multi-line entries", () => {
     expect(maxLength("two\nlines")).toBe(500);
   });
 
-  it("group bullets into lists for display", () => {
-    expect(bodyBlocks("Rules:\n- one\n- two\nThat's it")).toEqual([
-      { kind: "text", text: "Rules:" },
-      { kind: "list", items: ["one", "two"] },
-      { kind: "text", text: "That's it" },
-    ]);
-  });
 
   it("are accepted in pitches and submitted lines", () => {
     const blocks = Array.from({ length: 30 }, (_, i) => `Entry ${i}\n- point a\n- point b`).join("\n\n");
     const base = { slug: "lists", description: "A list a day", noun: "list", meterLabel: "Chaos" };
-    expect(parsePitch(form({ ...base, lines: blocks, format: "blocks" }))).toMatchObject({ ok: true, value: { lines: expect.arrayContaining(["Entry 0\n- point a\n- point b"]) } });
-    expect(parseLine(form({ body: "Rules for tonight:\n- no phones" }))).toEqual({ ok: true, value: { body: "Rules for tonight:\n- no phones", credit: null } });
+    expect(parsePitch(form({ ...base, lines: blocks, format: "blocks" }))).toMatchObject({ ok: true, value: { entries: expect.arrayContaining([{ body: "Entry 0\n- point a\n- point b", back: null }]) } });
+    expect(parseLine(form({ body: "Rules for tonight:\n- no phones" }))).toEqual({ ok: true, value: { body: "Rules for tonight:\n- no phones", back: null, credit: null } });
+  });
+});
+
+describe("flashcards", () => {
+  it("split front :: back", () => {
+    expect(splitCard("Situationship :: A relationship with none of the paperwork")).toEqual({
+      body: "Situationship",
+      back: "A relationship with none of the paperwork",
+    });
+    expect(splitCard("Red flags\n::\n- texts back in 3 days\n- ghosting")).toEqual({ body: "Red flags", back: "- texts back in 3 days\n- ghosting" });
+    expect(splitCard("no separator")).toEqual({ body: "no separator", back: null });
+    expect(splitCard("a :: b :: c")).toEqual({ body: "a", back: "b :: c" });
+  });
+
+  it("need a back on every card", () => {
+    const base = { slug: "words", description: "A word a day", noun: "word", meterLabel: "Usefulness", kind: "cards" };
+    const good = Array.from({ length: 30 }, (_, i) => `Word ${i} :: Meaning ${i}`).join("\n");
+    expect(parsePitch(form({ ...base, lines: good }))).toMatchObject({ ok: true, value: { kind: "cards", entries: expect.arrayContaining([{ body: "Word 0", back: "Meaning 0" }]) } });
+    const missing = `${good}\nWord with no meaning`;
+    expect(parsePitch(form({ ...base, lines: missing }))).toMatchObject({ ok: false, errors: { lines: expect.stringContaining("Entry 31 has no back") } });
+  });
+
+  it("lets readers submit a card's back", () => {
+    expect(parseLine(form({ body: "Ghosting someone", back: "Leaving without a goodbye" }))).toEqual({
+      ok: true,
+      value: { body: "Ghosting someone", back: "Leaving without a goodbye", credit: null },
+    });
   });
 });

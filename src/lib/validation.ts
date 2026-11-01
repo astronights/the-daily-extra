@@ -89,17 +89,41 @@ function entryText(form: FormData, key: string): string {
   return typeof v === "string" ? cleanEntry(v) : "";
 }
 
-export type LineInput = { body: string; credit: string | null };
+/** What a pack serves each day: a line, or a flashcard with a front and a back. */
+export type PackKind = "lines" | "cards";
 
+export function packKind(raw: unknown): PackKind {
+  return raw === "cards" ? "cards" : "lines";
+}
+
+/** One entry as stored: the text (or a card's front) and, for cards, the back. */
+export type Entry = { body: string; back: string | null };
+
+/** The separator between a flashcard's front and back. */
+export const CARD_SEPARATOR = "::";
+
+/** "Front :: Back" -> { body: "Front", back: "Back" }. No separator -> no back. */
+export function splitCard(entry: string): Entry {
+  const at = entry.indexOf(CARD_SEPARATOR);
+  if (at === -1) return { body: cleanEntry(entry), back: null };
+  const back = cleanEntry(entry.slice(at + CARD_SEPARATOR.length));
+  return { body: cleanEntry(entry.slice(0, at)), back: back || null };
+}
+
+export type LineInput = { body: string; back: string | null; credit: string | null };
+
+/** A reader's submitted line (or flashcard, with a "back"). */
 export function parseLine(form: FormData): Parsed<LineInput> {
   const errors: FieldErrors = {};
   const body = entryText(form, "body");
+  const back = entryText(form, "back");
   const credit = text(form, "credit");
   if (body.length < LIMITS.lineMin) errors.body = "Give us a bit more than that.";
   else if (body.length > maxLength(body)) errors.body = `Keep it under ${maxLength(body)} characters.`;
+  if (back.length > maxLength(back)) errors.back = `Keep it under ${maxLength(back)} characters.`;
   if (credit.length > LIMITS.name) errors.credit = `Keep your handle under ${LIMITS.name} characters.`;
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, value: { body, credit: optional(credit) } };
+  return { ok: true, value: { body, back: optional(back), credit: optional(credit) } };
 }
 
 /** "/Bad Excuses " -> "bad-excuses" */
@@ -147,12 +171,35 @@ export function splitLines(raw: string): string[] {
 
 export type PitchInput = {
   slug: string;
+  kind: PackKind;
   description: string;
   noun: string;
   meterLabel: string;
-  lines: string[];
+  entries: Entry[];
   credit: string | null;
 };
+
+/** Checks a pack's entries; returns an error message or null. */
+export function checkEntries(entries: Entry[], kind: PackKind): string | null {
+  if (entries.length < LIMITS.pitchLinesMin) {
+    return `We need at least ${LIMITS.pitchLinesMin} different ${kind === "cards" ? "cards" : "lines"}. You have ${entries.length}.`;
+  }
+  if (entries.length > LIMITS.pitchLinesMax) return `Up to ${LIMITS.pitchLinesMax} entries per pack.`;
+  for (let i = 0; i < entries.length; i++) {
+    const { body, back } = entries[i];
+    if (!body) return `Entry ${i + 1} has nothing before the ${CARD_SEPARATOR}.`;
+    if (body.length > maxLength(body)) return `Entry ${i + 1} is over ${maxLength(body)} characters.`;
+    if (kind === "cards" && !back) return `Entry ${i + 1} has no back. Write each card as front ${CARD_SEPARATOR} back.`;
+    if (back && back.length > maxLength(back)) return `The back of entry ${i + 1} is over ${maxLength(back)} characters.`;
+  }
+  return null;
+}
+
+/** Splits pasted text into entries for a pack of this kind. */
+export function toEntries(raw: string, format: EntryFormat, kind: PackKind): Entry[] {
+  const parts = splitEntries(raw, format);
+  return kind === "cards" ? parts.map(splitCard) : parts.map((body) => ({ body, back: null }));
+}
 
 export function parsePitch(form: FormData): Parsed<PitchInput> {
   const errors: FieldErrors = {};
@@ -161,8 +208,9 @@ export function parsePitch(form: FormData): Parsed<PitchInput> {
   const noun = text(form, "noun").toLowerCase();
   const meterLabel = text(form, "meterLabel");
   const credit = text(form, "credit");
+  const kind = packKind(form.get("kind"));
   const rawLines = form.get("lines");
-  const lines = splitEntries(typeof rawLines === "string" ? rawLines : "", entryFormat(form.get("format")));
+  const entries = toEntries(typeof rawLines === "string" ? rawLines : "", entryFormat(form.get("format")), kind);
 
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length < 2 || slug.length > 24) {
     errors.slug = "Use 2–24 letters, numbers or dashes.";
@@ -176,18 +224,12 @@ export function parsePitch(form: FormData): Parsed<PitchInput> {
   else if (noun.length > LIMITS.wordMax) errors.noun = `Keep it under ${LIMITS.wordMax} characters.`;
   if (!meterLabel) errors.meterLabel = "What should each one be rated on?";
   else if (meterLabel.length > LIMITS.wordMax) errors.meterLabel = `Keep it under ${LIMITS.wordMax} characters.`;
-  if (lines.length < LIMITS.pitchLinesMin) {
-    errors.lines = `We need at least ${LIMITS.pitchLinesMin} different lines. You have ${lines.length}.`;
-  } else if (lines.length > LIMITS.pitchLinesMax) {
-    errors.lines = `Up to ${LIMITS.pitchLinesMax} lines per pitch.`;
-  } else {
-    const long = lines.findIndex((l) => l.length > maxLength(l));
-    if (long !== -1) errors.lines = `Entry ${long + 1} is over ${maxLength(lines[long])} characters.`;
-  }
+  const entriesError = checkEntries(entries, kind);
+  if (entriesError) errors.lines = entriesError;
   if (credit.length > LIMITS.name) errors.credit = `Keep your handle under ${LIMITS.name} characters.`;
 
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, value: { slug, description, noun, meterLabel, lines, credit: optional(credit) } };
+  return { ok: true, value: { slug, kind, description, noun, meterLabel, entries, credit: optional(credit) } };
 }
 
 export type PackEdit = { description: string; noun: string; meterLabel: string; author: string | null };
@@ -209,43 +251,11 @@ export function parsePackEdit(form: FormData): Parsed<PackEdit> {
 }
 
 /** Admin fixing a line: text 1–200 characters. */
-export function parseLineEdit(form: FormData): Parsed<{ body: string }> {
+export function parseLineEdit(form: FormData): Parsed<Entry> {
   const body = entryText(form, "body");
+  const back = entryText(form, "back");
   if (!body) return { ok: false, errors: { body: "The line can't be empty." } };
   if (body.length > maxLength(body)) return { ok: false, errors: { body: `Keep it under ${maxLength(body)} characters.` } };
-  return { ok: true, value: { body } };
-}
-
-export type BodyBlock = { kind: "text"; text: string } | { kind: "list"; items: string[] };
-
-/**
- * Groups an entry's lines for display: runs of "- " lines become a
- * bulleted list, every other line is its own line of text.
- */
-export function bodyBlocks(body: string): BodyBlock[] {
-  const blocks: BodyBlock[] = [];
-  for (const line of body.split("\n")) {
-    const bullet = /^- (.*)$/.exec(line);
-    const last = blocks[blocks.length - 1];
-    if (bullet) {
-      if (last?.kind === "list") last.items.push(bullet[1]);
-      else blocks.push({ kind: "list", items: [bullet[1]] });
-    } else {
-      blocks.push({ kind: "text", text: line });
-    }
-  }
-  return blocks;
-}
-
-/** Splits "a *b* c" into plain and highlighted parts. */
-export function highlightParts(body: string): Array<{ text: string; mark: boolean }> {
-  return body
-    .split(/\*([^*]+)\*/)
-    .map((part, i) => ({ text: part, mark: i % 2 === 1 }))
-    .filter((p) => p.text !== "");
-}
-
-/** The message as it should be sent: highlight markers removed. */
-export function plainText(body: string): string {
-  return body.replace(/\*([^*]+)\*/g, "$1");
+  if (back.length > maxLength(back)) return { ok: false, errors: { back: `Keep it under ${maxLength(back)} characters.` } };
+  return { ok: true, value: { body, back: optional(back) } };
 }
