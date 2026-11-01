@@ -201,3 +201,26 @@ describe("pitches, the pile and launching", () => {
     expect(await repo.launchPack(db, "excuses", { day: DAY })).toBe(false);
   });
 });
+
+describe("admin edits", () => {
+  it("fix a pack's wording but not its name", async () => {
+    expect(await repo.updatePack(db, "drama", { description: "Fixed typo", noun: "fight", meterLabel: "Toxicity", author: "@sam" })).toBe(true);
+    expect(await repo.getPack(db, "drama")).toMatchObject({ slug: "drama", description: "Fixed typo", noun: "fight", meterLabel: "Toxicity", author: "@sam" });
+    expect(await repo.updatePack(db, "nope", { description: "x", noun: "x", meterLabel: "x", author: null })).toBe(false);
+  });
+
+  it("fix a line's text and level, refusing duplicates", async () => {
+    const [first, second] = await repo.listPackLines(db, "drama");
+    expect(await repo.updateLine(db, first.id, { body: "Fixed the typo", level: 5 })).toBe("ok");
+    expect((await repo.listPackLines(db, "drama"))[0]).toMatchObject({ body: "Fixed the typo", level: 5 });
+    expect(await repo.updateLine(db, second.id, { body: "FIXED the typo", level: 1 })).toBe("duplicate");
+    expect(await repo.updateLine(db, 999999, { body: "Nope", level: 1 })).toBe("missing");
+  });
+
+  it("can fix a submitted line while approving it", async () => {
+    await repo.addLine(db, { slug: "drama", body: "Who is kevn?", author: null, ipHash: "x" });
+    const [pending] = await repo.listPendingLines(db);
+    expect(await repo.approveLine(db, pending.id, 4, "Who is Kevin?")).toBe("ok");
+    expect((await repo.listPackLines(db, "drama")).at(-1)).toMatchObject({ body: "Who is Kevin?", level: 4, status: "approved" });
+  });
+});

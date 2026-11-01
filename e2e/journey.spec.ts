@@ -50,6 +50,25 @@ test("admin creates a pack from pasted lines", async ({ page }) => {
   await expect(page.getByText(`/drama-${suffix} is live with 120 lines.`)).toBeVisible();
 });
 
+test("admin fixes a pack's description and a line", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: /Packs ·/ }).click();
+  await page.getByRole("link", { name: new RegExp(`/drama-${suffix}`) }).click();
+  await expect(page.getByRole("heading", { name: "Edit pack" })).toBeVisible();
+
+  await page.getByLabel("What does it give you, once a day?").fill(`Fixed description ${suffix}`);
+  await page.getByRole("button", { name: "Save pack details" }).click();
+  await expect(page.getByText("Saved ✓")).toBeVisible();
+
+  const first = page.locator("form.report").first();
+  await first.locator("textarea").fill(`Fixed line ${suffix}, typo gone`);
+  await first.getByRole("button", { name: "Save" }).click();
+  await expect(first.getByText("Saved ✓")).toBeVisible();
+
+  await page.goto(`/drama-${suffix}`);
+  await expect(page.getByText(`Fixed description ${suffix}`)).toBeVisible();
+});
+
 test("reader sees today's line, copies it, follows the pack", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto(`/drama-${suffix}`);

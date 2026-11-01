@@ -14,7 +14,7 @@ Built with Next.js and Postgres. Phone first.
 | `/explore` | Search live packs and the pile |
 | `/pitch` | Pitch a new pack (30+ lines, paste or `.txt`) |
 | `/colours` | The 10-colour cycle packs are given |
-| `/admin` | Approve lines and pitches, launch packs, create your own packs |
+| `/admin` | Approve lines and pitches, launch packs, create your own packs, and edit any pack or line to fix typos |
 
 How it behaves:
 

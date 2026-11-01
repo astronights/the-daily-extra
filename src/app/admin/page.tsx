@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Admin", robots: { index: false } };
 
 type Props = { searchParams: Promise<{ tab?: string }> };
-type Tab = "lines" | "pitches" | "pile" | "new";
+type Tab = "lines" | "pitches" | "pile" | "packs" | "new";
 
 function AdminHeader({ signedIn }: { signedIn: boolean }) {
   return (
@@ -109,7 +109,7 @@ export default async function AdminPage({ searchParams }: Props) {
   }
 
   const { tab: rawTab } = await searchParams;
-  const tab: Tab = rawTab === "pitches" || rawTab === "pile" || rawTab === "new" ? rawTab : "lines";
+  const tab: Tab = rawTab === "pitches" || rawTab === "pile" || rawTab === "packs" || rawTab === "new" ? rawTab : "lines";
   const db = await getDb();
   const [pendingLines, pendingPitches, pile, packs] = await Promise.all([
     repo.listPendingLines(db),
@@ -127,6 +127,7 @@ export default async function AdminPage({ searchParams }: Props) {
     { key: "lines", label: `Lines · ${pendingLines.length}` },
     { key: "pitches", label: `Pitches · ${pendingPitches.length}` },
     { key: "pile", label: `Pile · ${pile.length}` },
+    { key: "packs", label: `Packs · ${packs.length}` },
     { key: "new", label: "New pack" },
   ];
 
@@ -136,7 +137,7 @@ export default async function AdminPage({ searchParams }: Props) {
       <h1 className="display" style={{ fontSize: 48 }}>
         The pile
       </h1>
-      <nav className="tabs" aria-label="Queue" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+      <nav className="tabs" aria-label="Queue" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
         {tabs.map((t) => (
           <Link key={t.key} href={`/admin?tab=${t.key}`} aria-current={t.key === tab ? "page" : undefined}>
             {t.label}
@@ -157,9 +158,10 @@ export default async function AdminPage({ searchParams }: Props) {
                   </span>
                   <span className="muted">{timeAgo(l.createdAt)}</span>
                 </div>
-                <p className="snippet" style={{ fontSize: 21, lineHeight: 1.25 }}>
-                  “{l.body}”
-                </p>
+                <label className="field">
+                  The line (fix typos before approving)
+                  <textarea name="body" rows={2} defaultValue={l.body} maxLength={200} className="textarea" style={{ fontSize: 18, fontWeight: 700 }} />
+                </label>
                 <label className="field" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   {pack?.meterLabel ?? "Level"}
                   <select name="level" className="select" defaultValue="3" style={{ width: "auto" }}>
@@ -241,6 +243,27 @@ export default async function AdminPage({ searchParams }: Props) {
                 </button>
               </form>
             </div>
+          ))
+        ) : (
+          <Empty />
+        )
+      ) : null}
+
+      {tab === "packs" ? (
+        packs.length ? (
+          packs.map((p) => (
+            <Link key={p.slug} href={`/admin/packs/${p.slug}`} className="list-item" style={{ textDecoration: "none" }}>
+              <span className="tag tag-lg" style={{ background: p.accent }}>
+                /{p.slug}
+              </span>
+              <span className="grow">
+                <span style={{ fontSize: 14, lineHeight: 1.35 }}>{p.description}</span>
+                <span className="mono muted" style={{ fontSize: 11 }}>
+                  {p.followers} following
+                </span>
+              </span>
+              <span className="chip">Edit</span>
+            </Link>
           ))
         ) : (
           <Empty />

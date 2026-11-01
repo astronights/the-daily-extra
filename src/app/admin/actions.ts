@@ -8,7 +8,7 @@ import type { FormState } from "@/lib/form-state";
 import { PALETTE, type Tone } from "@/lib/palette";
 import * as repo from "@/lib/repo";
 import { isAdmin, signIn, signOut } from "@/lib/session";
-import { intIn, parsePitch } from "@/lib/validation";
+import { intIn, parseLineEdit, parsePackEdit, parsePitch } from "@/lib/validation";
 
 async function requireAdmin(): Promise<void> {
   if (!(await isAdmin())) redirect("/admin");
@@ -39,12 +39,37 @@ export async function moderateLineAction(form: FormData): Promise<void> {
   await requireAdmin();
   const id = intIn(field(form, "id"), 1, 2 ** 31 - 1);
   const level = intIn(field(form, "level"), 1, 5) ?? 3;
+  const body = field(form, "body").replace(/\s+/g, " ").trim();
   const db = await getDb();
   if (id) {
-    if (field(form, "decision") === "approve") await repo.approveLine(db, id, level);
+    if (field(form, "decision") === "approve") await repo.approveLine(db, id, level, body && body.length <= 200 ? body : undefined);
     else await repo.rejectLine(db, id);
   }
   revalidatePath("/admin");
+}
+
+/** Fix a pack's description, words or credit. */
+export async function updatePackAction(slug: string, _prev: FormState, form: FormData): Promise<FormState> {
+  await requireAdmin();
+  const parsed = parsePackEdit(form);
+  if (!parsed.ok) return { status: "error", errors: parsed.errors };
+  if (!(await repo.updatePack(await getDb(), slug, parsed.value))) return { status: "error", message: "That pack no longer exists." };
+  revalidatePath("/", "layout");
+  return { status: "ok", message: "Saved." };
+}
+
+/** Fix a line's text or level. */
+export async function updateLineAction(_prev: FormState, form: FormData): Promise<FormState> {
+  await requireAdmin();
+  const id = intIn(field(form, "id"), 1, 2 ** 31 - 1);
+  const parsed = parseLineEdit(form);
+  if (!id) return { status: "error", message: "Unknown line." };
+  if (!parsed.ok) return { status: "error", errors: parsed.errors };
+  const result = await repo.updateLine(await getDb(), id, parsed.value);
+  if (result === "duplicate") return { status: "error", errors: { body: "This pack already has that line." } };
+  if (result === "missing") return { status: "error", message: "That line no longer exists." };
+  revalidatePath("/", "layout");
+  return { status: "ok", message: "Saved." };
 }
 
 export async function pitchDecisionAction(form: FormData): Promise<void> {

@@ -150,6 +150,36 @@ export function parsePitch(form: FormData): Parsed<PitchInput> {
   return { ok: true, value: { slug, description, noun, meterLabel, lines, credit: optional(credit) } };
 }
 
+export type PackEdit = { description: string; noun: string; meterLabel: string; author: string | null };
+
+/** Admin fixing a pack's wording. Same rules as a pitch, minus name and lines. */
+export function parsePackEdit(form: FormData): Parsed<PackEdit> {
+  const errors: FieldErrors = {};
+  const description = text(form, "description");
+  const noun = text(form, "noun").toLowerCase();
+  const meterLabel = text(form, "meterLabel");
+  const author = text(form, "credit");
+  if (description.length < LIMITS.descriptionMin) errors.description = "Tell us what it does.";
+  else if (description.length > LIMITS.descriptionMax) errors.description = `Keep it under ${LIMITS.descriptionMax} characters.`;
+  if (!noun || noun.length > LIMITS.wordMax) errors.noun = `1–${LIMITS.wordMax} characters.`;
+  if (!meterLabel || meterLabel.length > LIMITS.wordMax) errors.meterLabel = `1–${LIMITS.wordMax} characters.`;
+  if (author.length > LIMITS.name) errors.credit = `Keep it under ${LIMITS.name} characters.`;
+  if (Object.keys(errors).length) return { ok: false, errors };
+  return { ok: true, value: { description, noun, meterLabel, author: optional(author) } };
+}
+
+/** Admin fixing a line: text 1–200 characters, level 1–5. */
+export function parseLineEdit(form: FormData): Parsed<{ body: string; level: number }> {
+  const errors: FieldErrors = {};
+  const body = text(form, "body");
+  const level = intIn(text(form, "level"), 1, 5);
+  if (!body) errors.body = "The line can't be empty.";
+  else if (body.length > LIMITS.lineMax) errors.body = `Keep it under ${LIMITS.lineMax} characters.`;
+  if (level === null) errors.level = "Level goes from 1 to 5.";
+  if (Object.keys(errors).length) return { ok: false, errors };
+  return { ok: true, value: { body, level: level! } };
+}
+
 /** Splits "a *b* c" into plain and highlighted parts. */
 export function highlightParts(body: string): Array<{ text: string; mark: boolean }> {
   return body

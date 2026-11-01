@@ -260,8 +260,56 @@ export async function packLines(db: Db, slug: string): Promise<string[]> {
   return rows.map((r) => r.body);
 }
 
-export async function approveLine(db: Db, id: number, level: number): Promise<void> {
-  await db.query(`UPDATE entries SET status = 'approved', level = $2 WHERE id = $1 AND status = 'pending'`, [id, level]);
+/** Approves a pending line, optionally with fixed-up text. */
+export async function approveLine(db: Db, id: number, level: number, body?: string): Promise<"ok" | "duplicate"> {
+  try {
+    await db.query(
+      `UPDATE entries SET status = 'approved', level = $2, body = COALESCE($3, body) WHERE id = $1 AND status = 'pending'`,
+      [id, level, body ?? null],
+    );
+    return "ok";
+  } catch (e) {
+    if (isUniqueViolation(e)) return "duplicate";
+    throw e;
+  }
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "code" in e && (e as { code: unknown }).code === "23505";
+}
+
+export type EditableLine = { id: number; body: string; level: number; status: "pending" | "approved" | "rejected"; shownOn: string | null };
+
+/** Every line of a pack, for the admin editor. Newest last. */
+export async function listPackLines(db: Db, slug: string): Promise<EditableLine[]> {
+  return db.query<EditableLine>(
+    `SELECT id, body, level::int AS level, status, shown_on::text AS "shownOn" FROM entries WHERE pack_slug = $1 ORDER BY id`,
+    [slug],
+  );
+}
+
+/** Fixes a line's text or level. */
+export async function updateLine(db: Db, id: number, edit: { body: string; level: number }): Promise<"ok" | "duplicate" | "missing"> {
+  try {
+    const rows = await db.query(`UPDATE entries SET body = $2, level = $3 WHERE id = $1 RETURNING 1`, [id, edit.body, edit.level]);
+    return rows.length ? "ok" : "missing";
+  } catch (e) {
+    if (isUniqueViolation(e)) return "duplicate";
+    throw e;
+  }
+}
+
+/** Fixes a pack's wording. The name (address) can't change. */
+export async function updatePack(
+  db: Db,
+  slug: string,
+  edit: { description: string; noun: string; meterLabel: string; author: string | null },
+): Promise<boolean> {
+  const rows = await db.query(
+    `UPDATE packs SET description = $2, noun = $3, meter_label = $4, author = $5 WHERE slug = $1 RETURNING 1`,
+    [slug, edit.description, edit.noun, edit.meterLabel, edit.author],
+  );
+  return rows.length > 0;
 }
 
 /** Rejected lines are kept (so they can't be resubmitted), just never shown. */

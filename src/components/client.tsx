@@ -372,3 +372,99 @@ export function LoginForm({ action }: { action: Action }) {
     </form>
   );
 }
+
+/** Admin: fix one line's text and level. */
+export function EditLineForm({
+  action,
+  line,
+  meterLabel,
+}: {
+  action: Action;
+  line: { id: number; body: string; level: number; note: string };
+  meterLabel: string;
+}) {
+  const [state, formAction, pending] = useActionState(action, IDLE);
+  const e = state.status === "error" ? state.errors ?? {} : {};
+  return (
+    <form onSubmit={keepValues(formAction)} className="report" style={{ gap: 8 }}>
+      <input type="hidden" name="id" value={line.id} />
+      <label className="field">
+        <span className="meta-row">
+          <span>Line {line.id}</span>
+          <span className="muted">{line.note}</span>
+        </span>
+        <textarea name="body" rows={2} defaultValue={line.body} maxLength={LIMITS.lineMax} required className="textarea" aria-invalid={Boolean(e.body)} />
+      </label>
+      <FieldError id={`err-line-${line.id}`} message={e.body ?? (state.status === "error" ? state.message : undefined)} />
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {meterLabel}
+          <select name="level" className="select" defaultValue={String(line.level)} style={{ width: "auto" }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="row" style={{ gap: 10 }}>
+          {state.status === "ok" ? (
+            <span className="mono" role="status">
+              Saved ✓
+            </span>
+          ) : null}
+          <button type="submit" className="chip" disabled={pending}>
+            {pending ? "Saving…" : "Save"}
+          </button>
+        </span>
+      </div>
+    </form>
+  );
+}
+
+/** Admin: fix a pack's description, words and credit. */
+export function EditPackForm({
+  action,
+  pack,
+}: {
+  action: Action;
+  pack: { description: string; noun: string; meterLabel: string; author: string | null };
+}) {
+  const [state, formAction, pending] = useActionState(action, IDLE);
+  const e = state.status === "error" ? state.errors ?? {} : {};
+  return (
+    <form onSubmit={keepValues(formAction)} className="fieldset">
+      <label className="field">
+        What does it give you, once a day?
+        <input name="description" className="input" defaultValue={pack.description} required maxLength={LIMITS.descriptionMax} aria-invalid={Boolean(e.description)} />
+      </label>
+      <FieldError id="err-edit-description" message={e.description} />
+      <div className="grid-2">
+        <label className="field">
+          “Today&apos;s …”
+          <input name="noun" className="input" defaultValue={pack.noun} required maxLength={LIMITS.wordMax} />
+        </label>
+        <label className="field">
+          Rated on…
+          <input name="meterLabel" className="input" defaultValue={pack.meterLabel} required maxLength={LIMITS.wordMax} />
+        </label>
+      </div>
+      <FieldError id="err-edit-words" message={e.noun ?? e.meterLabel} />
+      <label className="field">
+        Credit (optional)
+        <input name="credit" className="input" defaultValue={pack.author ?? ""} maxLength={LIMITS.name} />
+      </label>
+      <FieldError id="err-edit-credit" message={e.credit ?? (state.status === "error" ? state.message : undefined)} />
+      <div className="row" style={{ justifyContent: "flex-end", gap: 12 }}>
+        {state.status === "ok" ? (
+          <span className="mono" role="status">
+            Saved ✓
+          </span>
+        ) : null}
+        <button type="submit" className="btn btn-ink btn-plain" disabled={pending}>
+          {pending ? "Saving…" : "Save pack details"}
+        </button>
+      </div>
+    </form>
+  );
+}

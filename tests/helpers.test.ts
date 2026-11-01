@@ -9,6 +9,8 @@ import {
   isBot,
   normalizeSlug,
   parseLine,
+  parseLineEdit,
+  parsePackEdit,
   parsePitch,
   parseReview,
   plainText,
@@ -144,5 +146,20 @@ describe("cookie lists", () => {
     expect(parseList(undefined)).toEqual([]);
     expect(toggleInList(["drama"], "excuses")).toEqual({ list: ["drama", "excuses"], added: true });
     expect(toggleInList(["drama", "excuses"], "drama")).toEqual({ list: ["excuses"], added: false });
+  });
+});
+
+describe("admin edit validation", () => {
+  it("checks pack edits", () => {
+    expect(parsePackEdit(form({ description: "A fight a day", noun: "Fight", meterLabel: "Toxicity", credit: "" }))).toEqual({
+      ok: true,
+      value: { description: "A fight a day", noun: "fight", meterLabel: "Toxicity", author: null },
+    });
+    expect(parsePackEdit(form({ description: "x", noun: "", meterLabel: "Toxicity" }))).toMatchObject({ ok: false });
+  });
+  it("checks line edits", () => {
+    expect(parseLineEdit(form({ body: "  fixed   line ", level: "4" }))).toEqual({ ok: true, value: { body: "fixed line", level: 4 } });
+    expect(parseLineEdit(form({ body: "", level: "4" }))).toMatchObject({ ok: false, errors: { body: expect.any(String) } });
+    expect(parseLineEdit(form({ body: "ok", level: "9" }))).toMatchObject({ ok: false, errors: { level: expect.any(String) } });
   });
 });
