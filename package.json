@@ -1,8 +1,8 @@
 {
-  "name": "thedaily",
+  "name": "extra",
   "version": "0.1.0",
   "private": true,
-  "description": "The Daily — one a day text generators. First pack: /drama.",
+  "description": "Extra — one-a-day text packs. Tiny doses of text, once a day.",
   "engines": {
     "node": ">=22.18"
   },

@@ -29,7 +29,7 @@ export default async function Home() {
             Search
           </Link>
         </div>
-        <h1 className="display">The Daily</h1>
+        <h1 className="display">Extra!</h1>
         <p className="lede" style={{ fontSize: 18 }}>
           Tiny doses of text, once a day.
         </p>

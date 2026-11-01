@@ -19,7 +19,7 @@ function AdminHeader({ signedIn }: { signedIn: boolean }) {
   return (
     <header className="topbar">
       <Link href="/" className="brand">
-        <span className="logo">The Daily</span>
+        <span className="logo">Extra</span>
         <span className="tag" style={{ background: "var(--ink)", color: "var(--yellow)" }}>
           /admin
         </span>

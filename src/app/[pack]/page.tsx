@@ -63,7 +63,7 @@ export default async function PackPage({ params }: Props) {
               <Meter level={daily.level} label={pack.meterLabel} />
               {daily.author ? <span className="mono muted">· {daily.author}</span> : null}
             </div>
-            <CopyShare text={plainText(daily.body)} title={`Today's ${pack.noun} · The Daily`} />
+            <CopyShare text={plainText(daily.body)} title={`Today's ${pack.noun} · Extra`} />
           </div>
         ) : (
           <div className="card card-dashed today">

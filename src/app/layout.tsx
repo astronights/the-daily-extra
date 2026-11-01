@@ -7,7 +7,7 @@ const body = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-body" }
 const mono = DM_Mono({ weight: "500", subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: { default: "The Daily", template: "%s · The Daily" },
+  title: { default: "Extra", template: "%s · Extra" },
   description: "Tiny doses of text, once a day.",
 };
 

@@ -44,7 +44,7 @@ export async function openDb(): Promise<Db> {
   return createPgliteDb(process.env.PGLITE_DIR ?? "./.pglite");
 }
 
-const globalForDb = globalThis as unknown as { __thedailyDb?: Promise<Db> };
+const globalForDb = globalThis as unknown as { __extraDb?: Promise<Db> };
 
 /**
  * The app's database. With DATABASE_URL (production) the schema is
@@ -52,7 +52,7 @@ const globalForDb = globalThis as unknown as { __thedailyDb?: Promise<Db> };
  * used and the same migration files are applied on first use.
  */
 export function getDb(): Promise<Db> {
-  globalForDb.__thedailyDb ??= (async () => {
+  globalForDb.__extraDb ??= (async () => {
     const url = process.env.DATABASE_URL;
     if (url) return createNeonDb(url);
     const db = await createPgliteDb(process.env.PGLITE_DIR ?? "./.pglite");
@@ -60,5 +60,5 @@ export function getDb(): Promise<Db> {
     await runMigrations(db);
     return db;
   })();
-  return globalForDb.__thedailyDb;
+  return globalForDb.__extraDb;
 }

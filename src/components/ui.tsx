@@ -53,7 +53,7 @@ export function Header({ slug, right }: { slug?: string; right?: ReactNode }) {
   return (
     <header className="topbar">
       <Link href="/" className="brand">
-        <span className="logo">The Daily</span>
+        <span className="logo">Extra</span>
         {slug ? <span className="tag">/{slug}</span> : null}
       </Link>
       {right ?? (
@@ -81,7 +81,7 @@ export function Footer() {
   return (
     <footer className="footer mono">
       <span>
-        The Daily · one a day · <Link href="/colours">colours</Link>
+        Extra · one a day · <Link href="/colours">colours</Link>
       </span>
       <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
         GitHub · @astronights

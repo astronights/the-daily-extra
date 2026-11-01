@@ -3,9 +3,9 @@ import { cookies, headers } from "next/headers";
 import { parseList, toggleInList } from "./cookie-list.ts";
 import { adminToken, hashIp, safeEqual } from "./crypto.ts";
 
-const FOLLOWS_COOKIE = "td_follows";
-const VOTES_COOKIE = "td_votes";
-const ADMIN_COOKIE = "td_admin";
+const FOLLOWS_COOKIE = "ex_follows";
+const VOTES_COOKIE = "ex_votes";
+const ADMIN_COOKIE = "ex_admin";
 const YEAR = 60 * 60 * 24 * 365;
 
 export type ListName = "follows" | "votes";

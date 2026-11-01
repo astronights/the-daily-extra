@@ -32,7 +32,7 @@ async function fillPackForm(page: Page, slug: string, count = 100) {
 
 test("home works before any pack exists", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "The Daily" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Extra!" })).toBeVisible();
   await expect(page.getByRole("link", { name: /GitHub · @astronights/ })).toHaveAttribute("href", "https://github.com/astronights");
 });
 

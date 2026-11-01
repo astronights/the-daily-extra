@@ -1,4 +1,4 @@
-# The Daily
+# Extra
 
 Tiny doses of text, once a day. Each **pack** (like `/drama`) serves one line a day to everyone, and people can score it, leave a review, submit new lines and pitch new packs.
 
@@ -57,7 +57,7 @@ Three tables (plus `schema_migrations`). Full definitions with comments are in `
 | `reviews` | score / review | `pack_slug`, `day`, `score` (1–5), `name`, `body` (empty = rating only), `created_at` |
 
 - Nothing is deleted: rejected packs and lines stay with status `rejected`. A rejected pack's name stays taken.
-- Who follows or upvoted what is kept in the visitor's cookies (`td_follows`, `td_votes`); the tables keep counts only.
+- Who follows or upvoted what is kept in the visitor's cookies (`ex_follows`, `ex_votes`); the tables keep counts only.
 - Each table has an `ip_hash` (salted hash, never the IP) for spam limits.
 
 ## Database changes
