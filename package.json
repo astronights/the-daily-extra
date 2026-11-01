@@ -4,7 +4,7 @@
   "private": true,
   "description": "Extra — one-a-day text packs. Tiny doses of text, once a day.",
   "engines": {
-    "node": "22.x"
+    "node": "26.x"
   },
   "scripts": {
     "dev": "next dev",
