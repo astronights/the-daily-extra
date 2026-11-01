@@ -16,14 +16,14 @@ export default function Colours() {
       </div>
       <ol className="form" style={{ listStyle: "none", padding: 0, margin: 0, gap: 12 }}>
         {PALETTE.map((t, i) => (
-          <li key={t.name} className="swatch" style={{ background: t.ground }}>
+          <li key={t.name} className="swatch" style={{ background: t.background }}>
             <span className="rank" style={{ width: 28 }}>
               {i + 1}
             </span>
             <span className="tag tag-lg" style={{ background: t.accent }}>
               /pack
             </span>
-            <span className="mono" style={{ flex: 1, textAlign: "right", color: t.text, fontWeight: 700 }}>
+            <span className="mono" style={{ flex: 1, textAlign: "right", color: t.accent, fontWeight: 700 }}>
               {t.name} {t.accent}
             </span>
           </li>

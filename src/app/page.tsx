@@ -3,20 +3,19 @@ import { followAction, voteAction } from "@/app/actions";
 import { Footer, Highlighted, Page, SearchIcon, UpIcon } from "@/components/ui";
 import { formatDay, formatIssue, issueNumber, utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
-import { tone } from "@/lib/palette";
 import * as repo from "@/lib/repo";
-import { readVoterId } from "@/lib/session";
+import { readList } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const db = await getDb();
-  const voter = await readVoterId();
+  const [follows, votes] = await Promise.all([readList("follows"), readList("votes")]);
   const day = utcDay();
   const [mine, allPacks, pile] = await Promise.all([
-    voter ? repo.followedPacks(db, voter) : Promise.resolve([]),
-    repo.listPacks(db),
-    repo.listPile(db, voter, { limit: 3 }),
+    repo.livePacksBySlugs(db, follows),
+    repo.listLivePacks(db),
+    repo.listPile(db, { limit: 3 }),
   ]);
   const dailies = await Promise.all(mine.map((p) => repo.getDaily(db, p.slug, day)));
 
@@ -50,7 +49,7 @@ export default async function Home() {
             return (
               <Link key={p.slug} href={`/${p.slug}`} className="card pack-card" style={{ padding: 18, gap: 12 }}>
                 <span className="meta-row">
-                  <span className="tag tag-lg" style={{ background: tone(p.color).accent }}>
+                  <span className="tag tag-lg" style={{ background: p.accent }}>
                     /{p.slug}
                   </span>
                   <span className="mono muted" style={{ fontSize: 11 }}>
@@ -99,21 +98,24 @@ export default async function Home() {
           <p className="lede" style={{ fontSize: 15, marginTop: -4 }}>
             Pitched packs that aren&apos;t live yet. Upvote the ones you want built.
           </p>
-          {pile.map((p, i) => (
-            <article key={p.id} className="list-item">
+          {pile.map((p, i) => {
+            const voted = votes.includes(p.slug);
+            return (
+            <article key={p.slug} className="list-item">
               <span className="rank">{i + 1}</span>
               <div className="grow">
                 <span style={{ fontFamily: "var(--mono)", fontSize: 16 }}>/{p.slug}</span>
                 <span style={{ fontSize: 14, lineHeight: 1.35 }}>{p.description}</span>
               </div>
-              <form action={voteAction.bind(null, p.id, "/")}>
-                <button type="submit" className="vote" aria-pressed={p.voted} aria-label={`${p.voted ? "Remove upvote from" : "Upvote"} /${p.slug}, ${p.votes} votes`}>
+              <form action={voteAction.bind(null, p.slug, "/")}>
+                <button type="submit" className="vote" aria-pressed={voted} aria-label={`${voted ? "Remove upvote from" : "Upvote"} /${p.slug}, ${p.votes} votes`}>
                   <UpIcon />
                   {p.votes}
                 </button>
               </form>
             </article>
-          ))}
+            );
+          })}
           <Link href="/explore?f=pile" className="mono" style={{ alignSelf: "flex-start", padding: "12px 0" }}>
             Search the whole pile →
           </Link>

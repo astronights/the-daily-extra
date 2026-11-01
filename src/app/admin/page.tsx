@@ -4,7 +4,7 @@ import { LoginForm, PackForm } from "@/components/client";
 import { Page } from "@/components/ui";
 import { timeAgo } from "@/lib/dates";
 import { getDb } from "@/lib/db";
-import { PALETTE } from "@/lib/palette";
+import { PALETTE, nextTone } from "@/lib/palette";
 import * as repo from "@/lib/repo";
 import { adminConfigured, isAdmin } from "@/lib/session";
 import { createPackAction, launchAction, login, logout, moderateLineAction, pitchDecisionAction } from "./actions";
@@ -35,12 +35,12 @@ function AdminHeader({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-function ColorSelect({ next }: { next: number }) {
+function ColorSelect({ next }: { next: string }) {
   return (
     <label className="field">
       Colour
       <select name="color" className="select" defaultValue="auto">
-        <option value="auto">Next in cycle · {PALETTE[next].name}</option>
+        <option value="auto">Next in cycle · {next}</option>
         {PALETTE.map((t, i) => (
           <option key={t.name} value={i}>
             {i + 1} · {t.name}
@@ -113,12 +113,15 @@ export default async function AdminPage({ searchParams }: Props) {
   const db = await getDb();
   const [pendingLines, pendingPitches, pile, packs] = await Promise.all([
     repo.listPendingLines(db),
-    repo.listPitches(db, "pending"),
-    repo.listPitches(db, "pile"),
-    repo.listPacks(db),
+    repo.listPacksByStatus(db, "pending"),
+    repo.listPacksByStatus(db, "pile"),
+    repo.listLivePacks(db),
   ]);
   const packBySlug = new Map(packs.map((p) => [p.slug, p]));
-  const next = packs.length % PALETTE.length;
+  const next = nextTone(packs.length).name;
+  // Lines are only needed for the tab being shown.
+  const shown = tab === "pitches" ? pendingPitches : tab === "pile" ? pile : [];
+  const linesBySlug = new Map(await Promise.all(shown.map(async (p) => [p.slug, await repo.packLines(db, p.slug)] as const)));
 
   const tabs: Array<{ key: Tab; label: string }> = [
     { key: "lines", label: `Lines · ${pendingLines.length}` },
@@ -150,7 +153,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 <input type="hidden" name="id" value={l.id} />
                 <div className="meta-row mono">
                   <span>
-                    /{l.packSlug} · {l.credit ?? "anonymous"}
+                    /{l.packSlug} · {l.author ?? "anonymous"}
                   </span>
                   <span className="muted">{timeAgo(l.createdAt)}</span>
                 </div>
@@ -186,19 +189,19 @@ export default async function AdminPage({ searchParams }: Props) {
       {tab === "pitches" ? (
         pendingPitches.length ? (
           pendingPitches.map((p) => (
-            <form key={p.id} action={pitchDecisionAction} className="yellow" style={{ boxShadow: "5px 5px 0 var(--ink)", padding: 18, gap: 12 }}>
-              <input type="hidden" name="id" value={p.id} />
+            <form key={p.slug} action={pitchDecisionAction} className="yellow" style={{ boxShadow: "5px 5px 0 var(--ink)", padding: 18, gap: 12 }}>
+              <input type="hidden" name="slug" value={p.slug} />
               <div className="meta-row">
                 <span style={{ fontFamily: "var(--mono)", fontSize: 20 }}>/{p.slug}</span>
                 <span className="mono">
-                  {p.credit ?? "anonymous"} · {timeAgo(p.createdAt)}
+                  {p.author ?? "anonymous"} · {timeAgo(p.createdAt)}
                 </span>
               </div>
               <p className="lede">{p.description}</p>
               <p className="mono" style={{ margin: 0 }}>
                 Today&apos;s {p.noun} · rated on {p.meterLabel}
               </p>
-              <Lines lines={p.lines} />
+              <Lines lines={linesBySlug.get(p.slug) ?? []} />
               <div className="grid-2">
                 <button type="submit" name="decision" value="pile" className="btn btn-ink btn-plain">
                   Add to the pile
@@ -217,22 +220,22 @@ export default async function AdminPage({ searchParams }: Props) {
       {tab === "pile" ? (
         pile.length ? (
           pile.map((p) => (
-            <div key={p.id} className="card" style={{ padding: 18, gap: 12, boxShadow: "5px 5px 0 var(--ink)" }}>
+            <div key={p.slug} className="card" style={{ padding: 18, gap: 12, boxShadow: "5px 5px 0 var(--ink)" }}>
               <div className="meta-row">
                 <span style={{ fontFamily: "var(--mono)", fontSize: 20 }}>/{p.slug}</span>
                 <span className="mono">{p.votes} votes</span>
               </div>
               <p className="lede">{p.description}</p>
-              <Lines lines={p.lines} />
+              <Lines lines={linesBySlug.get(p.slug) ?? []} />
               <form action={launchAction} className="form" style={{ gap: 10 }}>
-                <input type="hidden" name="id" value={p.id} />
+                <input type="hidden" name="slug" value={p.slug} />
                 <ColorSelect next={next} />
                 <button type="submit" className="btn btn-accent">
                   Launch pack
                 </button>
               </form>
               <form action={pitchDecisionAction}>
-                <input type="hidden" name="id" value={p.id} />
+                <input type="hidden" name="slug" value={p.slug} />
                 <button type="submit" name="decision" value="reject" className="btn btn-plain btn-block">
                   Remove from pile
                 </button>

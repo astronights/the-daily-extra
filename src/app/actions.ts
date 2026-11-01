@@ -5,7 +5,7 @@ import { utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import { RATE_LIMITS, SLOW_DOWN, type FormState } from "@/lib/form-state";
 import * as repo from "@/lib/repo";
-import { currentIpHash, ensureVoterId } from "@/lib/session";
+import { currentIpHash, toggleList } from "@/lib/session";
 import { isBot, parseLine, parsePitch, parseReview } from "@/lib/validation";
 
 async function tooMany(kind: keyof typeof RATE_LIMITS, ipHash: string): Promise<boolean> {
@@ -28,11 +28,10 @@ export async function postReview(_prev: FormState, form: FormData): Promise<Form
   if (!parsed.ok) return { status: "error", errors: parsed.errors };
 
   const db = await getDb();
-  if (!(await repo.getPack(db, slug))) return { status: "error", message: "That pack doesn't exist." };
+  if (!(await repo.getLivePack(db, slug))) return { status: "error", message: "That pack doesn't exist." };
   const ipHash = await currentIpHash();
   if (await tooMany("reviews", ipHash)) return { status: "error", message: SLOW_DOWN };
 
-  await repo.getDaily(db, slug, utcDay());
   await repo.addReview(db, { slug, day: utcDay(), ...parsed.value, ipHash });
   revalidatePath(`/${slug}`);
   revalidatePath(`/${slug}/reports`);
@@ -50,12 +49,10 @@ export async function submitLine(_prev: FormState, form: FormData): Promise<Form
   const parsed = parseLine(form);
   if (!parsed.ok) return { status: "error", errors: parsed.errors };
 
-  const db = await getDb();
-  if (!(await repo.getPack(db, slug))) return { status: "error", message: "That pack doesn't exist." };
   const ipHash = await currentIpHash();
   if (await tooMany("entries", ipHash)) return { status: "error", message: SLOW_DOWN };
-
-  const result = await repo.addLine(db, { slug, ...parsed.value, ipHash });
+  const result = await repo.addLine(await getDb(), { slug, body: parsed.value.body, author: parsed.value.credit, ipHash });
+  if (result === "missing") return { status: "error", message: "That pack doesn't exist." };
   if (result === "duplicate") return { status: "error", errors: { body: "Someone beat you to that one." } };
   return { status: "ok" };
 }
@@ -66,26 +63,34 @@ export async function pitchPack(_prev: FormState, form: FormData): Promise<FormS
   if (!parsed.ok) return { status: "error", errors: parsed.errors };
 
   const ipHash = await currentIpHash();
-  if (await tooMany("pitches", ipHash)) return { status: "error", message: SLOW_DOWN };
-  const result = await repo.addPitch(await getDb(), { ...parsed.value, ipHash });
-  if (result === "taken") return { status: "error", errors: { slug: `/${parsed.value.slug} is already a live pack.` } };
+  if (await tooMany("packs", ipHash)) return { status: "error", message: SLOW_DOWN };
+  const { credit, ...rest } = parsed.value;
+  const result = await repo.addPitch(await getDb(), { ...rest, author: credit, ipHash });
+  const name = `/${parsed.value.slug}`;
+  if (result === "taken") return { status: "error", errors: { slug: `${name} is already a live pack.` } };
+  if (result === "unavailable") return { status: "error", errors: { slug: `${name} isn't available. Try another name.` } };
   if (result === "duplicate") {
-    return { status: "error", errors: { slug: `Someone already pitched /${parsed.value.slug}. Find it in Explore and upvote it.` } };
+    return { status: "error", errors: { slug: `Someone already pitched ${name}. Find it in Explore and upvote it.` } };
   }
   return { status: "ok" };
 }
 
-/** Follow / unfollow. `path` is the page to refresh. */
+/** Follow / unfollow: the list lives in a cookie, the count in the database. */
 export async function followAction(slug: string, path: string): Promise<void> {
-  const voter = await ensureVoterId();
-  await repo.toggleFollow(await getDb(), voter, slug);
+  const db = await getDb();
+  if (!(await repo.getLivePack(db, slug))) return;
+  const added = await toggleList("follows", slug);
+  await repo.changeFollowers(db, slug, added ? 1 : -1);
   revalidatePath(path);
   revalidatePath("/");
 }
 
-export async function voteAction(pitchId: number, path: string): Promise<void> {
-  const voter = await ensureVoterId();
-  await repo.toggleVote(await getDb(), pitchId, voter);
+/** Upvote / remove upvote on a pitch in the pile. Same idea as follows. */
+export async function voteAction(slug: string, path: string): Promise<void> {
+  const db = await getDb();
+  if ((await repo.getPack(db, slug))?.status !== "pile") return;
+  const added = await toggleList("votes", slug);
+  await repo.changeVotes(db, slug, added ? 1 : -1);
   revalidatePath(path);
   revalidatePath("/");
 }

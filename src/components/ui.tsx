@@ -6,9 +6,9 @@ import { highlightParts } from "@/lib/validation";
 
 export const GITHUB_URL = "https://github.com/astronights";
 
-/** Page shell. Pass a pack colour to theme the page. */
-export function Page({ color, children }: { color?: number; children: ReactNode }) {
-  const style = (color === undefined ? undefined : toneStyle(color)) as CSSProperties | undefined;
+/** Page shell. Pass a pack to theme the page in its colours. */
+export function Page({ pack, children }: { pack?: { accent: string | null; background: string | null }; children: ReactNode }) {
+  const style = (pack ? toneStyle(pack.accent, pack.background) : undefined) as CSSProperties | undefined;
   return (
     <div className="page" style={style}>
       <div className="wrap">{children}</div>

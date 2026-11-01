@@ -3,9 +3,8 @@ import Link from "next/link";
 import { followAction, voteAction } from "@/app/actions";
 import { BackHeader, CheckIcon, Footer, Page, PlusIcon, SearchIcon, UpIcon } from "@/components/ui";
 import { getDb } from "@/lib/db";
-import { tone } from "@/lib/palette";
 import * as repo from "@/lib/repo";
-import { readVoterId } from "@/lib/session";
+import { readList } from "@/lib/session";
 import { normalizeSlug } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +23,12 @@ export default async function Explore({ searchParams }: Props) {
   const q = (sp.q ?? "").trim().slice(0, 60);
   const f = sp.f === "live" || sp.f === "pile" ? sp.f : "all";
   const db = await getDb();
-  const voter = await readVoterId();
-  const [packs, pile, mine] = await Promise.all([
-    f === "pile" ? Promise.resolve([]) : repo.listPacks(db, q),
-    f === "live" ? Promise.resolve([]) : repo.listPile(db, voter, { q }),
-    voter ? repo.followedPacks(db, voter) : Promise.resolve([]),
+  const [follows, votes] = await Promise.all([readList("follows"), readList("votes")]);
+  const [packs, pile] = await Promise.all([
+    f === "pile" ? Promise.resolve([]) : repo.listLivePacks(db, q),
+    f === "live" ? Promise.resolve([]) : repo.listPile(db, { q }),
   ]);
-  const followed = new Set(mine.map((p) => p.slug));
+  const followed = new Set(follows);
   const path = `/explore?${new URLSearchParams({ ...(q ? { q } : {}), ...(f !== "all" ? { f } : {}) })}`;
   const pitchSlug = normalizeSlug(q);
 
@@ -72,7 +70,7 @@ export default async function Explore({ searchParams }: Props) {
             return (
               <article key={p.slug} className="card" style={{ padding: 16, gap: 10, boxShadow: "5px 5px 0 var(--ink)" }}>
                 <div className="meta-row">
-                  <Link href={`/${p.slug}`} className="tag tag-lg" style={{ background: tone(p.color).accent }}>
+                  <Link href={`/${p.slug}`} className="tag tag-lg" style={{ background: p.accent }}>
                     /{p.slug}
                   </Link>
                   <form action={followAction.bind(null, p.slug, path)}>
@@ -99,20 +97,23 @@ export default async function Explore({ searchParams }: Props) {
           <h2 className="mono muted" style={{ margin: 0, fontWeight: 500 }}>
             In the pile · {pile.length} {pile.length === 1 ? "result" : "results"}
           </h2>
-          {pile.map((p) => (
-            <article key={p.id} className="list-item">
+          {pile.map((p) => {
+            const voted = votes.includes(p.slug);
+            return (
+            <article key={p.slug} className="list-item">
               <div className="grow">
                 <span style={{ fontFamily: "var(--mono)", fontSize: 16 }}>/{p.slug}</span>
                 <span style={{ fontSize: 14, lineHeight: 1.35 }}>{p.description}</span>
               </div>
-              <form action={voteAction.bind(null, p.id, path)}>
-                <button type="submit" className="vote" aria-pressed={p.voted} aria-label={`${p.voted ? "Remove upvote from" : "Upvote"} /${p.slug}, ${p.votes} votes`}>
+              <form action={voteAction.bind(null, p.slug, path)}>
+                <button type="submit" className="vote" aria-pressed={voted} aria-label={`${voted ? "Remove upvote from" : "Upvote"} /${p.slug}, ${p.votes} votes`}>
                   <UpIcon />
                   {p.votes}
                 </button>
               </form>
             </article>
-          ))}
+            );
+          })}
         </section>
       ) : null}
 

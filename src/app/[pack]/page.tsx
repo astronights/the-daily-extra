@@ -7,7 +7,7 @@ import { CheckIcon, Footer, Header, Highlighted, Meter, Page, PlusIcon } from "@
 import { formatDay, formatIssue, issueNumber, timeAgo, utcDay } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import * as repo from "@/lib/repo";
-import { readVoterId } from "@/lib/session";
+import { readList } from "@/lib/session";
 import { plainText } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ type Props = { params: Promise<{ pack: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { pack: slug } = await params;
-  const pack = await repo.getPack(await getDb(), slug);
+  const pack = await repo.getLivePack(await getDb(), slug);
   if (!pack) return { title: "Not found" };
   return { title: `Today's ${pack.noun} · /${pack.slug}`, description: pack.description };
 }
@@ -24,21 +24,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PackPage({ params }: Props) {
   const { pack: slug } = await params;
   const db = await getDb();
-  const pack = await repo.getPack(db, slug);
+  const pack = await repo.getLivePack(db, slug);
   if (!pack) notFound();
 
   const day = utcDay();
-  const voter = await readVoterId();
-  const [daily, summary, { reports, total }, following] = await Promise.all([
+  const following = (await readList("follows")).includes(slug);
+  const [daily, summary, { reports, total }] = await Promise.all([
     repo.getDaily(db, slug, day),
     repo.ratingSummary(db, slug, day),
     repo.listReports(db, slug, day, { limit: 3 }),
-    voter ? repo.isFollowing(db, voter, slug) : Promise.resolve(false),
   ]);
   const fives = summary.count ? Math.round((summary.counts[4] / summary.count) * 100) : 0;
 
   return (
-    <Page color={pack.color}>
+    <Page pack={pack}>
       <Header slug={pack.slug} />
 
       <section id="today" className="form" style={{ gap: 20 }}>
@@ -62,7 +61,7 @@ export default async function PackPage({ params }: Props) {
             </p>
             <div className="row">
               <Meter level={daily.level} label={pack.meterLabel} />
-              {daily.credit ? <span className="mono muted">· {daily.credit}</span> : null}
+              {daily.author ? <span className="mono muted">· {daily.author}</span> : null}
             </div>
             <CopyShare text={plainText(daily.body)} title={`Today's ${pack.noun} · The Daily`} />
           </div>
@@ -130,7 +129,7 @@ export default async function PackPage({ params }: Props) {
         </h2>
         <p className="lede">{pack.description}</p>
         <p className="mono muted" style={{ margin: 0, lineHeight: 1.6 }}>
-          {pack.credit ? `Pitched by ${pack.credit} · ` : ""}Since {formatDay(pack.launchedOn).replace(/^\w+ · /, "")}
+          {pack.author ? `Pitched by ${pack.author} · ` : ""}Since {formatDay(pack.launchedOn).replace(/^\w+ · /, "")}
           <br />
           {pack.followers} following · Rated on {pack.meterLabel}
         </p>

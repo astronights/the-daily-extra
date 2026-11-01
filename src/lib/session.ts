@@ -1,11 +1,15 @@
-// Request-scoped helpers: who is this (anonymously), and are they the admin.
+// Request-scoped helpers: the visitor's cookies, and whether they're the admin.
 import { cookies, headers } from "next/headers";
-import { randomUUID } from "node:crypto";
+import { parseList, toggleInList } from "./cookie-list.ts";
 import { adminToken, hashIp, safeEqual } from "./crypto.ts";
 
-const VOTER_COOKIE = "td_vid";
+const FOLLOWS_COOKIE = "td_follows";
+const VOTES_COOKIE = "td_votes";
 const ADMIN_COOKIE = "td_admin";
 const YEAR = 60 * 60 * 24 * 365;
+
+export type ListName = "follows" | "votes";
+const LIST_COOKIES: Record<ListName, string> = { follows: FOLLOWS_COOKIE, votes: VOTES_COOKIE };
 
 function secret(): string {
   return process.env.SESSION_SECRET || "local-dev-secret";
@@ -17,19 +21,23 @@ export async function currentIpHash(): Promise<string> {
   return hashIp(secret(), ip);
 }
 
-/** Anonymous id kept in a cookie. Used for follows and upvotes. */
-export async function readVoterId(): Promise<string | null> {
-  return (await cookies()).get(VOTER_COOKIE)?.value ?? null;
+/** Packs this visitor follows, or pitches they've upvoted. */
+export async function readList(name: ListName): Promise<string[]> {
+  return parseList((await cookies()).get(LIST_COOKIES[name])?.value);
 }
 
-/** Same, but creates the cookie if missing. Only call from server actions. */
-export async function ensureVoterId(): Promise<string> {
+/** Adds or removes a pack from a list cookie. Only call from server actions. */
+export async function toggleList(name: ListName, slug: string): Promise<boolean> {
   const jar = await cookies();
-  const existing = jar.get(VOTER_COOKIE)?.value;
-  if (existing) return existing;
-  const id = randomUUID();
-  jar.set(VOTER_COOKIE, id, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: YEAR, path: "/" });
-  return id;
+  const { list, added } = toggleInList(parseList(jar.get(LIST_COOKIES[name])?.value), slug);
+  jar.set(LIST_COOKIES[name], list.join(","), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: YEAR,
+    path: "/",
+  });
+  return added;
 }
 
 export function adminConfigured(): boolean {

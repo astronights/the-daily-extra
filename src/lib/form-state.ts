@@ -15,5 +15,5 @@ export const SLOW_DOWN = "Easy, menace. You've posted a lot just now. Try again 
 export const RATE_LIMITS = {
   reviews: { max: 5, minutes: 10 },
   entries: { max: 5, minutes: 60 },
-  pitches: { max: 3, minutes: 60 },
+  packs: { max: 3, minutes: 60 },
 } as const;

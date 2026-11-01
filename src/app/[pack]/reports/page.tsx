@@ -28,7 +28,7 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   const { pack: slug } = await params;
   const sp = await searchParams;
   const db = await getDb();
-  const pack = await repo.getPack(db, slug);
+  const pack = await repo.getLivePack(db, slug);
   if (!pack) notFound();
 
   const sort: repo.ReportSort = sp.sort === "high" || sp.sort === "low" ? sp.sort : "new";
@@ -41,7 +41,7 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   ]);
 
   return (
-    <Page color={pack.color}>
+    <Page pack={pack}>
       <Header
         slug={pack.slug}
         right={

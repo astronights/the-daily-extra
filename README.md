@@ -20,7 +20,7 @@ How it behaves:
 
 - A new daily starts at **midnight UTC**. Lines that have never been shown go first; once all are used, the oldest come back.
 - Reviews post right away. Submitted lines and pitches wait for you in `/admin`.
-- Follows and upvotes need no account: they're tied to an anonymous cookie.
+- Follows and upvotes need no account: they're kept in the visitor's cookies.
 - Spam protection: a hidden honeypot field and per-IP limits (5 reviews / 10 min, 5 lines / hour, 3 pitches / hour). IPs are stored only as salted hashes.
 - Wrap words in `*asterisks*` in a line to highlight them.
 
@@ -45,6 +45,20 @@ With no `DATABASE_URL`, the app uses a built-in Postgres (PGlite) stored in `./.
 | `npm test` | Unit tests (data layer runs against an in-memory Postgres) |
 | `npm run test:e2e` | Builds, starts the app and runs the full journey on a phone and a desktop browser |
 | `npm run db:migrate` | Applies pending files in `migrations/` to `DATABASE_URL` (or the local database) |
+
+## Database
+
+Three tables (plus `schema_migrations`). Full definitions with comments are in `migrations/0001_init.sql`.
+
+| Table | One row per | Key columns |
+|---|---|---|
+| `packs` | pack, from pitch to live | `slug`, `status` (pending → pile → live, or rejected), `description`, `noun`, `meter_label`, `accent`, `background`, `author`, `votes`, `followers`, `launched_on`, `created_at` |
+| `entries` | line | `pack_slug`, `body`, `author`, `level` (1–5), `status` (pending, approved, rejected), `shown_on` (the day it was the daily), `created_at` |
+| `reviews` | score / review | `pack_slug`, `day`, `score` (1–5), `name`, `body` (empty = rating only), `created_at` |
+
+- Nothing is deleted: rejected packs and lines stay with status `rejected`. A rejected pack's name stays taken.
+- Who follows or upvoted what is kept in the visitor's cookies (`td_follows`, `td_votes`); the tables keep counts only.
+- Each table has an `ip_hash` (salted hash, never the IP) for spam limits.
 
 ## Database changes
 

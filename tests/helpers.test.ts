@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { adminToken, hashIp, safeEqual } from "../src/lib/crypto.ts";
 import { formatCountdown, formatDay, formatIssue, issueNumber, msUntilNextDay, timeAgo, utcDay } from "../src/lib/dates.ts";
-import { PALETTE, nextColor, tone, toneStyle } from "../src/lib/palette.ts";
+import { PALETTE, nextTone, tone, toneStyle } from "../src/lib/palette.ts";
+import { parseList, toggleInList } from "../src/lib/cookie-list.ts";
 import { splitStatements } from "../src/lib/db.ts";
 import {
   highlightParts,
@@ -49,21 +50,24 @@ describe("dates", () => {
 describe("palette", () => {
   it("has 10 tones and cycles", () => {
     expect(PALETTE).toHaveLength(10);
-    expect(nextColor(0)).toBe(0);
-    expect(nextColor(10)).toBe(0);
-    expect(nextColor(13)).toBe(3);
+    expect(nextTone(0)).toBe(PALETTE[0]);
+    expect(nextTone(10)).toBe(PALETTE[0]);
+    expect(nextTone(13)).toBe(PALETTE[3]);
     expect(tone(11)).toBe(PALETTE[1]);
-    expect(toneStyle(0)["--accent"]).toBe("#D6114A");
+    expect(toneStyle("#6A2AE0", "#F3EEFF")).toEqual({ "--accent": "#6A2AE0", "--accent-text": "#6A2AE0", "--ground": "#F3EEFF" });
+    expect(toneStyle(null, null)["--accent"]).toBe("#D6114A");
   });
 
-  it("every accent passes 4.5:1 contrast with white text", () => {
+  it("every accent passes 4.5:1 with white text, and as text on its background", () => {
     const lum = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
     for (const t of PALETTE) {
       expect(1.05 / (lum(t.accent) + 0.05), t.name).toBeGreaterThanOrEqual(4.5);
-      expect((lum(t.ground) + 0.05) / (lum(t.text) + 0.05), t.name).toBeGreaterThanOrEqual(4.5);
+      expect((lum(t.background) + 0.05) / (lum(t.accent) + 0.05), t.name).toBeGreaterThanOrEqual(4.5);
+      expect(t.accent).toMatch(/^#[0-9A-F]{6}$/);
+      expect(t.background).toMatch(/^#[0-9A-F]{6}$/);
     }
   });
 });
@@ -131,5 +135,14 @@ describe("crypto", () => {
 describe("splitStatements", () => {
   it("splits a migration into statements and drops comments", () => {
     expect(splitStatements("-- hi\nCREATE TABLE a (x int);\n\nCREATE INDEX b ON a (x);\n")).toEqual(["CREATE TABLE a (x int)", "CREATE INDEX b ON a (x)"]);
+  });
+});
+
+describe("cookie lists", () => {
+  it("parse safely and toggle", () => {
+    expect(parseList("drama,excuses,drama,Bad Name,,x")).toEqual(["drama", "excuses", "x"]);
+    expect(parseList(undefined)).toEqual([]);
+    expect(toggleInList(["drama"], "excuses")).toEqual({ list: ["drama", "excuses"], added: true });
+    expect(toggleInList(["drama", "excuses"], "drama")).toEqual({ list: ["excuses"], added: false });
   });
 });
