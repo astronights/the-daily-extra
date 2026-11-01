@@ -6,13 +6,11 @@ import type { Db } from "./db.ts";
 
 export type Migration = { name: string; sql: string };
 
-export const MIGRATIONS_DIR = join(process.cwd(), "migrations");
-
-export function loadMigrations(dir: string = MIGRATIONS_DIR): Migration[] {
-  return readdirSync(dir)
+export function loadMigrations(): Migration[] {
+  return readdirSync(join(process.cwd(), "migrations"))
     .filter((f) => /^\d{4}_[\w-]+\.sql$/.test(f))
     .sort()
-    .map((name) => ({ name, sql: readFileSync(join(dir, name), "utf8") }));
+    .map((name) => ({ name, sql: readFileSync(join(process.cwd(), "migrations", name), "utf8") }));
 }
 
 /** Applies migrations that have not run yet. Returns the names it applied. */

@@ -4,7 +4,7 @@
 import { openDb } from "../src/lib/db.ts";
 import { loadMigrations, runMigrations } from "../src/lib/migrations.ts";
 
-const target = process.env.DATABASE_URL ? "DATABASE_URL" : "local ./.pglite";
+const target = process.env.DATABASE_URL ? "DATABASE_URL" : `local ${process.env.PGLITE_DIR ?? "./.pglite"}`;
 const migrations = loadMigrations();
 const db = await openDb();
 const applied = await runMigrations(db, migrations);
