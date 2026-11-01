@@ -92,7 +92,7 @@ test("reader rates and reviews; it shows in field reports", async ({ page }) => 
   // Browser validation stops an unscored review.
   await expect(page.getByText("Report received.")).toHaveCount(0);
 
-  await expect(page.getByText("Not rated yet")).toBeVisible();
+  await expect(page.getByRole("img", { name: "3 out of 5, not rated yet" })).toBeVisible();
   await page.locator("label[for='score-4']").click();
   await page.getByLabel("What happened? (optional)").fill("They went very quiet. Then laughed.");
   await page.getByLabel("Your name (optional)").fill("@tester");

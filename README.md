@@ -59,7 +59,7 @@ Three tables (plus `schema_migrations`). Full definitions with comments are in `
 - Nothing is deleted: rejected packs and lines stay with status `rejected`. A rejected pack's name stays taken.
 - Who follows or upvoted what is kept in the visitor's cookies (`ex_follows`, `ex_votes`); the tables keep counts only.
 - Each table has an `ip_hash` (salted hash, never the IP) for spam limits.
-- A line's meter (e.g. Toxicity) is its readers' average score across every day it's been shown. New lines show "Not rated yet".
+- A line's meter (e.g. Toxicity) is its readers' average score across every day it's been shown. New lines start at 3 with a "new" label.
 
 ## Database changes
 

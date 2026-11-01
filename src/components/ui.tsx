@@ -102,28 +102,27 @@ export function Highlighted({ body }: { body: string }) {
   );
 }
 
+/** Where the meter starts for a line nobody has rated yet. */
+export const DEFAULT_METER = 3;
+
 /** The pack's meter (e.g. Toxicity), filled from readers' average rating of this line. */
 export function Meter({ score, ratings, label }: { score: number | null; ratings: number; label: string }) {
-  if (score === null) {
-    return (
-      <span className="row mono" style={{ gap: 10 }}>
-        <span>{label}</span>
-        <span className="muted">Not rated yet</span>
-      </span>
-    );
-  }
-  const filled = Math.round(score);
+  const unrated = score === null;
+  const filled = unrated ? DEFAULT_METER : Math.round(score);
+  const ratingsText = `${ratings} ${ratings === 1 ? "rating" : "ratings"}`;
   return (
     <span className="row mono" style={{ gap: 10 }}>
       <span>{label}</span>
-      <span className="meter" role="img" aria-label={`${score} out of 5 from ${ratings} ${ratings === 1 ? "rating" : "ratings"}`}>
+      <span
+        className="meter"
+        role="img"
+        aria-label={unrated ? `${DEFAULT_METER} out of 5, not rated yet` : `${score} out of 5 from ${ratingsText}`}
+      >
         {[1, 2, 3, 4, 5].map((n) => (
           <span key={n} className={n <= filled ? "on" : undefined} />
         ))}
       </span>
-      <span className="muted">
-        {ratings} {ratings === 1 ? "rating" : "ratings"}
-      </span>
+      <span className="muted">{unrated ? "new" : ratingsText}</span>
     </span>
   );
 }
